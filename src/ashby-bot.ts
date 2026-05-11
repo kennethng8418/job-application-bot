@@ -1148,6 +1148,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
       // Fill any required radio groups that the per-field handlers above didn't catch
       await this.fillRequiredRadioGroups();
+      await this.fillRequiredComboboxes();
 
     } catch (error) {
       console.log('  ℹ️  No additional questions or unable to auto-fill');
@@ -1184,6 +1185,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
       // that the pre-submit pass missed. Filling them here lets the per-field recovery
       // below focus on text/checkbox fields.
       await this.fillRequiredRadioGroups();
+      await this.fillRequiredComboboxes();
 
       // For each missing field, try to find and fill it using AI
       for (const errorMsg of errorMessages) {
@@ -1543,6 +1545,154 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     }
 
     console.log(`🔘 Radio-group pass: ${filled}/${processed} answered`);
+  }
+
+  private async fillRequiredComboboxes(): Promise<void> {
+    if (!this.page) return;
+
+    console.log('🔽 Scanning for required combobox questions...');
+
+    const fieldsets = await this.page.locator('fieldset').all();
+
+    let processed = 0;
+    let filled = 0;
+
+    for (const fieldset of fieldsets) {
+      try {
+        const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
+        const titleCount = await titleLabel.count();
+        if (titleCount === 0) continue;
+
+        const classAttr = (await titleLabel.getAttribute('class')) ?? '';
+        const classList = classAttr.split(/\s+/);
+        const isRequired = classList.some(c => /^_required_/.test(c));
+        if (!isRequired) continue;
+
+        const combobox = fieldset.locator('input[role="combobox"]').first();
+        const comboboxCount = await combobox.count();
+        if (comboboxCount === 0) continue;
+
+        // Skip if already filled (covers the legacy "How did you hear" handler
+        // at lines ~896-928 plus any prefilled form state)
+        const currentValue = await combobox.inputValue();
+        if (currentValue.trim().length > 0) continue;
+
+        const questionText = (await titleLabel.textContent())?.trim() ?? '';
+        if (!questionText) continue;
+
+        // Open the listbox. Click first; some Ashby comboboxes also require an
+        // ArrowDown to open, so press it as belt-and-suspenders (no-op if the
+        // click already opened the menu).
+        await combobox.click({ timeout: 5000 });
+        await combobox.press('ArrowDown').catch(() => {});
+
+        // Wait for the listbox itself to become visible. More reliable than
+        // watching aria-expanded, which some implementations don't flip.
+        const listboxAppeared = await this.page
+          .locator('[role="listbox"]:visible')
+          .first()
+          .waitFor({ state: 'visible', timeout: 2000 })
+          .then(() => true)
+          .catch(() => false);
+
+        if (!listboxAppeared) {
+          console.log(`  ⚠️  Combobox for "${questionText}" did not open (no visible listbox appeared). Skipping.`);
+          continue;
+        }
+
+        // Resolve the listbox element via aria-controls, falling back to page-wide visible
+        const ariaControls = await combobox.getAttribute('aria-controls');
+        let listbox = ariaControls
+          ? this.page.locator(`[id="${ariaControls.replace(/"/g, '\\"')}"]`)
+          : this.page.locator('[role="listbox"]:visible').first();
+
+        if ((await listbox.count()) === 0 || !(await listbox.isVisible().catch(() => false))) {
+          listbox = this.page.locator('[role="listbox"]:visible').first();
+        }
+
+        if ((await listbox.count()) === 0) {
+          console.log(`  ⚠️  Could not find listbox for "${questionText}". Skipping.`);
+          continue;
+        }
+
+        // Scrape options
+        const optionLocators = await listbox.locator('[role="option"]').all();
+        const optionTexts: string[] = [];
+        for (const opt of optionLocators) {
+          const text = (await opt.textContent())?.trim() ?? '';
+          if (text) optionTexts.push(text);
+        }
+
+        if (optionTexts.length === 0) {
+          console.log(`  ⚠️  Combobox "${questionText}" has no options. Skipping.`);
+          continue;
+        }
+
+        processed++;
+        console.log(`  ❓ ${questionText}`);
+        console.log(`     Options: ${optionTexts.join(' | ')}`);
+
+        const chosen = await this.aiGenerator.pickFromOptions(questionText, optionTexts);
+
+        if (!chosen) {
+          console.log(`  ⚠️  Could not pick an option for "${questionText}". Skipping.`);
+          continue;
+        }
+
+        const chosenNorm = chosen.trim().toLowerCase();
+        const matchedOption =
+          optionTexts.find(o => o === chosen) ??
+          optionTexts.find(o => o.trim().toLowerCase() === chosenNorm);
+
+        if (!matchedOption) {
+          console.log(`  ⚠️  AI returned "${chosen}" which does not match any option. Skipping.`);
+          continue;
+        }
+
+        // Compute a unique prefix: truncate at the first " (" if present.
+        const parenIdx = matchedOption.indexOf(' (');
+        const candidatePrefix = (parenIdx >= 0 ? matchedOption.slice(0, parenIdx) : matchedOption).trim();
+        const candidateLower = candidatePrefix.toLowerCase();
+
+        const isUniquePrefix = optionTexts.every(
+          o => o === matchedOption || !o.trim().toLowerCase().startsWith(candidateLower)
+        );
+
+        const typeText = isUniquePrefix ? candidatePrefix : matchedOption;
+
+        // Clear any partial state and type the prefix slowly enough for the
+        // autocomplete filter to react.
+        await combobox.fill('');
+        await combobox.pressSequentially(typeText, { delay: 30 });
+
+        // Give the listbox a moment to narrow before pressing Enter.
+        await this.page.waitForTimeout(200);
+        await combobox.press('Enter');
+        await this.page.waitForTimeout(300);
+
+        const finalValue = (await combobox.inputValue()).trim();
+        const finalLower = finalValue.toLowerCase();
+        const matchedLower = matchedOption.toLowerCase();
+        const verified =
+          finalLower === matchedLower ||
+          finalLower.startsWith(matchedLower) ||
+          matchedLower.startsWith(finalLower);
+
+        if (verified && finalValue.length > 0) {
+          console.log(`  ✅ Selected "${matchedOption}" for "${questionText}"`);
+          filled++;
+        } else {
+          console.log(
+            `  ⚠️  Combobox value did not update after selecting "${matchedOption}" for "${questionText}" (current value: "${finalValue}")`
+          );
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Error processing a combobox: ${error}`);
+        continue;
+      }
+    }
+
+    console.log(`🔽 Combobox pass: ${filled}/${processed} answered`);
   }
 
   async fillEmptyRequiredFields(): Promise<void> {
