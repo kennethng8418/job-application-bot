@@ -1666,7 +1666,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         await writeLog(
           result.status,
           result.message,
-          result.screenshotPath ?? null,
+          result.screenshotPath || null,
           result.errorDetails ?? null,
           submitStartTime
         );
