@@ -1545,6 +1545,28 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     console.log(`🔘 Radio-group pass: ${filled}/${processed} answered`);
   }
 
+  private async fillRequiredComboboxes(): Promise<void> {
+    if (!this.page) return;
+
+    console.log('🔽 Scanning for required combobox questions...');
+
+    const fieldsets = await this.page.locator('fieldset').all();
+
+    let processed = 0;
+    let filled = 0;
+
+    for (const fieldset of fieldsets) {
+      try {
+        // Implementation added in subsequent tasks.
+      } catch (error) {
+        console.log(`  ⚠️  Error processing a combobox: ${error}`);
+        continue;
+      }
+    }
+
+    console.log(`🔽 Combobox pass: ${filled}/${processed} answered`);
+  }
+
   async fillEmptyRequiredFields(): Promise<void> {
     if (!this.page) return;
 
