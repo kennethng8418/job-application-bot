@@ -1683,12 +1683,13 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
+      const errDetails = error instanceof Error ? (error.stack ?? error.message) : String(error);
       console.log(`  ⚠️  Error during submission: ${errMsg}`);
       await writeLog(
         'unknown',
         'Exception thrown during submission',
         null,
-        errMsg,
+        errDetails,
         overallStart
       );
     }
