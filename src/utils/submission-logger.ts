@@ -12,38 +12,38 @@ export interface SubmissionLogEntry {
   errorDetails: string | null;
 }
 
-const LOG_DIR = path.resolve(process.cwd(), 'logs');
-const LOG_FILE = path.join(LOG_DIR, 'submissions.json');
-
-function readExistingEntries(): SubmissionLogEntry[] {
-  if (!fs.existsSync(LOG_FILE)) {
+function readExistingEntries(logFile: string): SubmissionLogEntry[] {
+  if (!fs.existsSync(logFile)) {
     return [];
   }
 
   try {
-    const raw = fs.readFileSync(LOG_FILE, 'utf-8');
+    const raw = fs.readFileSync(logFile, 'utf-8');
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      console.warn(`  ⚠️  ${LOG_FILE} did not contain a JSON array — starting fresh.`);
+      console.warn(`  ⚠️  ${logFile} did not contain a JSON array — starting fresh.`);
       return [];
     }
     return parsed as SubmissionLogEntry[];
   } catch (error) {
-    console.warn(`  ⚠️  Could not parse ${LOG_FILE} (${error}). Starting fresh.`);
+    console.warn(`  ⚠️  Could not parse ${logFile} (${error}). Starting fresh.`);
     return [];
   }
 }
 
 export async function logSubmission(entry: SubmissionLogEntry): Promise<void> {
+  const logDir = path.resolve(process.cwd(), 'logs');
+  const logFile = path.join(logDir, 'submissions.json');
+
   try {
-    if (!fs.existsSync(LOG_DIR)) {
-      fs.mkdirSync(LOG_DIR, { recursive: true });
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const entries = readExistingEntries();
+    const entries = readExistingEntries(logFile);
     entries.push(entry);
-    fs.writeFileSync(LOG_FILE, JSON.stringify(entries, null, 2), 'utf-8');
-    console.log(`  📝 Logged submission to ${LOG_FILE}`);
+    fs.writeFileSync(logFile, JSON.stringify(entries, null, 2), 'utf-8');
+    console.log(`  📝 Logged submission to ${logFile}`);
   } catch (error) {
     console.warn(`  ⚠️  Failed to write submission log: ${error}`);
   }
