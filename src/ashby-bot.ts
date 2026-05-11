@@ -1135,6 +1135,9 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         }
       }
 
+      // Fill any required radio groups that the per-field handlers above didn't catch
+      await this.fillRequiredRadioGroups();
+
     } catch (error) {
       console.log('  ℹ️  No additional questions or unable to auto-fill');
     }
