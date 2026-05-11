@@ -1555,8 +1555,6 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     let processed = 0;
     let filled = 0;
 
-    const escapeId = (id: string) => id.replace(/(["\\\#\.:\[\]\(\)])/g, '\\$1');
-
     for (const fieldset of fieldsets) {
       try {
         const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
@@ -1616,7 +1614,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         // Resolve the listbox element via aria-controls, falling back to page-wide visible
         const ariaControls = await combobox.getAttribute('aria-controls');
         let listbox = ariaControls
-          ? this.page.locator(`#${escapeId(ariaControls)}`)
+          ? this.page.locator(`[id="${ariaControls.replace(/"/g, '\\"')}"]`)
           : this.page.locator('[role="listbox"]:visible').first();
 
         if ((await listbox.count()) === 0 || !(await listbox.isVisible().catch(() => false))) {
