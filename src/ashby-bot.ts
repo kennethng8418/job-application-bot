@@ -1169,6 +1169,11 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         }
       }
 
+      // Try radio groups first — many "Missing entry" errors are actually radio groups
+      // that the pre-submit pass missed. Filling them here lets the per-field recovery
+      // below focus on text/checkbox fields.
+      await this.fillRequiredRadioGroups();
+
       // For each missing field, try to find and fill it using AI
       for (const errorMsg of errorMessages) {
         try {
