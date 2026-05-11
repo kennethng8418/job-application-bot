@@ -1557,7 +1557,26 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
     for (const fieldset of fieldsets) {
       try {
-        // Implementation added in subsequent tasks.
+        const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
+        const titleCount = await titleLabel.count();
+        if (titleCount === 0) continue;
+
+        const classAttr = (await titleLabel.getAttribute('class')) ?? '';
+        const classList = classAttr.split(/\s+/);
+        const isRequired = classList.some(c => /^_required_/.test(c));
+        if (!isRequired) continue;
+
+        const combobox = fieldset.locator('input[role="combobox"]').first();
+        const comboboxCount = await combobox.count();
+        if (comboboxCount === 0) continue;
+
+        // Skip if already filled (covers the legacy "How did you hear" handler
+        // at lines ~896-928 plus any prefilled form state)
+        const currentValue = await combobox.inputValue();
+        if (currentValue.trim().length > 0) continue;
+
+        const questionText = (await titleLabel.textContent())?.trim() ?? '';
+        if (!questionText) continue;
       } catch (error) {
         console.log(`  ⚠️  Error processing a combobox: ${error}`);
         continue;
