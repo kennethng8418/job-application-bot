@@ -3,6 +3,7 @@ import { BaseApplicationBot } from './base-application-bot';
 import { ResumeData } from '../config/resume-data';
 import { AIAnswerGenerator } from './ai-answer-generator';
 import { clickWithRetry, fillWithRetry, checkWithRetry } from './utils/retry-helper';
+import { logSubmission, SubmissionLogEntry } from './utils/submission-logger';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -1546,6 +1547,30 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
     console.log('🚀 Attempting to submit application...');
 
+    const company = this.extractCompanyName();
+    const jobUrlAtStart = this.page.url();
+    const overallStart = Date.now();
+
+    const writeLog = async (
+      status: 'success' | 'error' | 'unknown',
+      message: string,
+      screenshotPath: string | null,
+      errorDetails: string | null,
+      startTime: number
+    ) => {
+      const entry: SubmissionLogEntry = {
+        timestamp: new Date().toISOString(),
+        company,
+        status,
+        message,
+        jobUrl: this.page ? this.page.url() : jobUrlAtStart,
+        screenshotPath,
+        durationMs: Date.now() - startTime,
+        errorDetails
+      };
+      await logSubmission(entry);
+    };
+
     try {
       // Proactively fill any empty required fields before submission
       await this.fillEmptyRequiredFields();
@@ -1573,7 +1598,6 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
           const count = await button.count();
 
           if (count > 0) {
-            // Check if button is visible and enabled
             const isVisible = await button.isVisible().catch(() => false);
             const isDisabled = await button.isDisabled().catch(() => true);
 
@@ -1587,7 +1611,6 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
             }
           }
         } catch (error) {
-          // Try next selector
           continue;
         }
       }
@@ -1596,22 +1619,27 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         console.log('  ⚠️  Could not find or click submit button. Please submit manually.');
         console.log('  ℹ️  Waiting 30 seconds for manual submission...');
         await this.page.waitForTimeout(30000);
+        await writeLog(
+          'unknown',
+          'Submit button not found or not clickable',
+          null,
+          'No matching submit button selector was visible and enabled',
+          overallStart
+        );
         return;
       }
 
-      //Attempt to submit
       await submitButton.scrollIntoViewIfNeeded().catch(() => {});
       await this.page.waitForTimeout(500);
 
+      const submitStartTime = Date.now();
       const clicked = await clickWithRetry(submitButton, 'Submit Application');
 
       if (clicked) {
         console.log('  ✅ Submit button clicked!');
 
-        // Verify submission and capture proof
         const result = await this.verifySubmission();
 
-        // Display final result
         if (result.success) {
           console.log('');
           console.log('╔════════════════════════════════════════════════════════════╗');
@@ -1634,12 +1662,35 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
           console.log('⚠️  Please verify manually if the application was submitted.');
           console.log('');
         }
+
+        await writeLog(
+          result.status,
+          result.message,
+          result.screenshotPath ?? null,
+          result.errorDetails ?? null,
+          submitStartTime
+        );
       } else {
         console.log('  ⚠️  Could not click submit button');
+        await writeLog(
+          'unknown',
+          'Submit button click failed after retries',
+          null,
+          'clickWithRetry returned false',
+          submitStartTime
+        );
       }
 
     } catch (error) {
-      console.log(`  ⚠️  Error during submission: ${error}`);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.log(`  ⚠️  Error during submission: ${errMsg}`);
+      await writeLog(
+        'unknown',
+        'Exception thrown during submission',
+        null,
+        errMsg,
+        overallStart
+      );
     }
   }
 
