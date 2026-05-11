@@ -1148,6 +1148,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
       // Fill any required radio groups that the per-field handlers above didn't catch
       await this.fillRequiredRadioGroups();
+      await this.fillRequiredComboboxes();
 
     } catch (error) {
       console.log('  ℹ️  No additional questions or unable to auto-fill');
@@ -1184,6 +1185,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
       // that the pre-submit pass missed. Filling them here lets the per-field recovery
       // below focus on text/checkbox fields.
       await this.fillRequiredRadioGroups();
+      await this.fillRequiredComboboxes();
 
       // For each missing field, try to find and fill it using AI
       for (const errorMsg of errorMessages) {
