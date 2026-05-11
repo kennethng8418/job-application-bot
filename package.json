@@ -8,7 +8,8 @@
     "start": "npm run build && node dist/src/apply.js",
     "analyze": "npm run build && node dist/src/analyze-form.js",
     "dev": "ts-node src/apply.ts",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:unit": "npm run build && node --test dist/src/utils/__tests__/*.test.js"
   },
   "keywords": [
     "automation",
