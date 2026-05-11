@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.example
+
+# Resume files (keep private)
+resumes/*.pdf
+resumes/*.docx
+resumes/*.txt
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Video recordings
+recordings/
+
+# Personal data (don't commit your actual resume data)
+config/resume-data.ts

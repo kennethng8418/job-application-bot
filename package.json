@@ -1,0 +1,35 @@
+{
+  "name": "ashbyhq-job-application-bot",
+  "version": "1.0.0",
+  "description": "Automated job application submission for AshbyHQ with AI-powered answers",
+  "main": "dist/src/apply.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/src/apply.js",
+    "analyze": "npm run build && node dist/src/analyze-form.js",
+    "dev": "ts-node src/apply.ts",
+    "test": "playwright test"
+  },
+  "keywords": [
+    "automation",
+    "job-application",
+    "ashbyhq",
+    "playwright",
+    "claude-ai",
+    "ai-answers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "dotenv": "^16.4.5",
+    "pdf-parse": "^1.1.1",
+    "playwright": "^1.41.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.39",
+    "@types/pdf-parse": "^1.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
