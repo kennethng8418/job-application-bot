@@ -4,6 +4,14 @@ import { ResumeData } from '../config/resume-data';
 import { AIAnswerGenerator } from './ai-answer-generator';
 import { clickWithRetry, fillWithRetry, checkWithRetry } from './utils/retry-helper';
 import * as path from 'path';
+import * as fs from 'fs';
+
+interface SubmissionResult {
+  success: boolean;
+  message: string;
+  screenshotPath?: string;
+  confirmationNumber?: string;
+}
 
 export class AshbyJobApplicationBot extends BaseApplicationBot {
   private aiGenerator: AIAnswerGenerator;
@@ -1596,8 +1604,34 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
       const clicked = await clickWithRetry(submitButton, 'Submit Application');
 
       if (clicked) {
-        console.log('  ✅ Application submitted!');
-        await this.page.waitForTimeout(2000);
+        console.log('  ✅ Submit button clicked!');
+
+        // Verify submission and capture proof
+        const result = await this.verifySubmission();
+
+        // Display final result
+        if (result.success) {
+          console.log('');
+          console.log('╔════════════════════════════════════════════════════════════╗');
+          console.log('║           ✅ APPLICATION SUBMITTED SUCCESSFULLY!           ║');
+          console.log('╚════════════════════════════════════════════════════════════╝');
+          console.log(`📝 ${result.message}`);
+          if (result.screenshotPath) {
+            console.log(`📸 Screenshot: ${result.screenshotPath}`);
+          }
+          console.log('');
+        } else {
+          console.log('');
+          console.log('╔════════════════════════════════════════════════════════════╗');
+          console.log('║            ⚠️  SUBMISSION STATUS UNCLEAR                   ║');
+          console.log('╚════════════════════════════════════════════════════════════╝');
+          console.log(`⚠️  ${result.message}`);
+          if (result.screenshotPath) {
+            console.log(`📸 Screenshot: ${result.screenshotPath}`);
+          }
+          console.log('⚠️  Please verify manually if the application was submitted.');
+          console.log('');
+        }
       } else {
         console.log('  ⚠️  Could not click submit button');
       }
@@ -1605,6 +1639,222 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     } catch (error) {
       console.log(`  ⚠️  Error during submission: ${error}`);
     }
+  }
+
+  // ============================================================================
+  // POST-SUBMISSION VERIFICATION METHODS
+  // ============================================================================
+
+  /**
+   * Detect if submission was successful
+   */
+  private async detectSubmissionSuccess(): Promise<boolean> {
+    if (!this.page) return false;
+
+    try {
+      // Check URL for success indicators
+      const url = this.page.url();
+      const successUrlPatterns = [/thank.*you/i, /success/i, /confirmation/i, /submitted/i];
+
+      for (const pattern of successUrlPatterns) {
+        if (pattern.test(url)) {
+          console.log(`  ✅ Success detected in URL: ${url}`);
+          return true;
+        }
+      }
+
+      // Check page content for success messages
+      const successSelectors = [
+        'text=Application submitted',
+        'text=Thank you for applying',
+        'text=We received your application',
+        'text=Application complete',
+        'text=Successfully submitted',
+        'text=Your application has been submitted',
+        '[data-testid="success-icon"]',
+        '.success-message',
+        '.confirmation-message'
+      ];
+
+      for (const selector of successSelectors) {
+        const element = await this.page.locator(selector).first();
+        if (await element.count() > 0 && await element.isVisible().catch(() => false)) {
+          const text = await element.innerText().catch(() => selector);
+          console.log(`  ✅ Success message found: "${text.substring(0, 60)}..."`);
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.log(`  ⚠️  Error detecting success: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Detect submission errors
+   */
+  private async detectSubmissionErrors(): Promise<string | null> {
+    if (!this.page) return null;
+
+    try {
+      const errorSelectors = [
+        '.error-message',
+        '[role="alert"]',
+        '.alert-danger',
+        '.alert-error',
+        'text=Please fill out',
+        'text=Required field',
+        'text=Error submitting',
+        'text=Something went wrong',
+        'text=Unable to submit',
+        '[aria-invalid="true"]',
+        '.field-error',
+        '.validation-error'
+      ];
+
+      for (const selector of errorSelectors) {
+        const element = await this.page.locator(selector).first();
+        if (await element.count() > 0 && await element.isVisible().catch(() => false)) {
+          const errorText = await element.innerText().catch(() => '');
+          if (errorText && errorText.trim().length > 0) {
+            console.log(`  ❌ Error detected: "${errorText.substring(0, 100)}..."`);
+            return errorText.trim();
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.log(`  ⚠️  Error during error detection: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extract confirmation number from page
+   */
+  private async extractConfirmationNumber(): Promise<string | null> {
+    if (!this.page) return null;
+
+    try {
+      const pageText = await this.page.innerText('body').catch(() => '');
+
+      const patterns = [
+        /confirmation.*?([A-Z0-9]{6,})/i,
+        /reference.*?([A-Z0-9]{6,})/i,
+        /application.*?id.*?([A-Z0-9]{6,})/i,
+        /confirmation.*?number.*?([A-Z0-9]{6,})/i,
+        /tracking.*?number.*?([A-Z0-9]{6,})/i
+      ];
+
+      for (const pattern of patterns) {
+        const match = pageText.match(pattern);
+        if (match && match[1]) {
+          console.log(`  🎫 Confirmation number found: ${match[1]}`);
+          return match[1];
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.log(`  ⚠️  Error extracting confirmation number: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extract company name from URL or page
+   */
+  private extractCompanyName(): string {
+    if (!this.page) return 'unknown';
+
+    try {
+      const url = this.page.url();
+      // Extract from AshbyHQ URL pattern: jobs.ashbyhq.com/CompanyName/...
+      const match = url.match(/jobs\.ashbyhq\.com\/([^\/]+)/);
+      return match && match[1] ? match[1] : 'unknown';
+    } catch (error) {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Capture screenshot for submission proof
+   */
+  private async captureSubmissionProof(status: 'success' | 'error' | 'unknown'): Promise<string> {
+    if (!this.page) return '';
+
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+      const timeHHMM = new Date().toTimeString().split(' ')[0].replace(/:/g, '-');
+      const company = this.extractCompanyName();
+      const filename = `./screenshots/${status}-${company}-${timestamp}-${timeHHMM}.png`;
+
+      await this.page.screenshot({
+        path: filename,
+        fullPage: true
+      });
+
+      console.log(`  📸 Screenshot saved: ${filename}`);
+      return filename;
+    } catch (error) {
+      console.log(`  ⚠️  Error capturing screenshot: ${error}`);
+      return '';
+    }
+  }
+
+  /**
+   * Verify submission status
+   */
+  private async verifySubmission(): Promise<SubmissionResult> {
+    console.log('🔍 Verifying submission status...');
+
+    // Wait for page to update after submit
+    await this.page!.waitForTimeout(3000);
+
+    // Check for success
+    const isSuccess = await this.detectSubmissionSuccess();
+
+    if (isSuccess) {
+      console.log('✅ SUCCESS: Application submitted successfully!');
+      const screenshotPath = await this.captureSubmissionProof('success');
+      const confirmationNumber = await this.extractConfirmationNumber();
+
+      return {
+        success: true,
+        message: confirmationNumber
+          ? `Application submitted! Confirmation: ${confirmationNumber}`
+          : 'Application submitted successfully',
+        screenshotPath,
+        confirmationNumber: confirmationNumber || undefined
+      };
+    }
+
+    // Check for errors
+    const error = await this.detectSubmissionErrors();
+
+    if (error) {
+      console.log(`❌ ERROR: ${error}`);
+      const screenshotPath = await this.captureSubmissionProof('error');
+
+      return {
+        success: false,
+        message: `Submission failed: ${error}`,
+        screenshotPath
+      };
+    }
+
+    // Unknown state
+    console.log('⚠️  UNKNOWN: Cannot verify submission status');
+    const screenshotPath = await this.captureSubmissionProof('unknown');
+
+    return {
+      success: false,
+      message: 'Submission status unknown - please verify manually',
+      screenshotPath
+    };
   }
 
   async close(): Promise<void> {
