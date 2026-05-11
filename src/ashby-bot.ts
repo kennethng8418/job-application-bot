@@ -1555,6 +1555,8 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     let processed = 0;
     let filled = 0;
 
+    const escapeId = (id: string) => id.replace(/(["\\\#\.:\[\]\(\)])/g, '\\$1');
+
     for (const fieldset of fieldsets) {
       try {
         const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
@@ -1577,6 +1579,71 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
         const questionText = (await titleLabel.textContent())?.trim() ?? '';
         if (!questionText) continue;
+
+        // Open the listbox
+        await combobox.click({ timeout: 5000 });
+
+        // Wait for aria-expanded to flip
+        const expanded = await combobox
+          .evaluate(
+            (el, ms) =>
+              new Promise<boolean>(resolve => {
+                const check = () => el.getAttribute('aria-expanded') === 'true';
+                if (check()) return resolve(true);
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore – MutationObserver is a browser global; this code runs inside page.evaluate
+                const observer = new MutationObserver(() => {
+                  if (check()) {
+                    observer.disconnect();
+                    resolve(true);
+                  }
+                });
+                observer.observe(el, { attributes: true, attributeFilter: ['aria-expanded'] });
+                setTimeout(() => {
+                  observer.disconnect();
+                  resolve(check());
+                }, ms);
+              }),
+            2000
+          )
+          .catch(() => false);
+
+        if (!expanded) {
+          console.log(`  ⚠️  Combobox for "${questionText}" did not open (aria-expanded never became true). Skipping.`);
+          continue;
+        }
+
+        // Resolve the listbox element via aria-controls, falling back to page-wide visible
+        const ariaControls = await combobox.getAttribute('aria-controls');
+        let listbox = ariaControls
+          ? this.page.locator(`#${escapeId(ariaControls)}`)
+          : this.page.locator('[role="listbox"]:visible').first();
+
+        if ((await listbox.count()) === 0 || !(await listbox.isVisible().catch(() => false))) {
+          listbox = this.page.locator('[role="listbox"]:visible').first();
+        }
+
+        if ((await listbox.count()) === 0) {
+          console.log(`  ⚠️  Could not find listbox for "${questionText}". Skipping.`);
+          continue;
+        }
+
+        // Scrape options
+        const optionLocators = await listbox.locator('[role="option"]').all();
+        const optionTexts: string[] = [];
+        for (const opt of optionLocators) {
+          const text = (await opt.textContent())?.trim() ?? '';
+          if (text) optionTexts.push(text);
+        }
+
+        if (optionTexts.length === 0) {
+          console.log(`  ⚠️  Combobox "${questionText}" has no options. Skipping.`);
+          continue;
+        }
+
+        processed++;
+        console.log(`  ❓ ${questionText}`);
+        console.log(`     Options: ${optionTexts.join(' | ')}`);
       } catch (error) {
         console.log(`  ⚠️  Error processing a combobox: ${error}`);
         continue;
