@@ -1642,6 +1642,34 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         processed++;
         console.log(`  ❓ ${questionText}`);
         console.log(`     Options: ${optionTexts.join(' | ')}`);
+
+        const chosen = await this.aiGenerator.pickFromOptions(questionText, optionTexts);
+
+        if (!chosen) {
+          console.log(`  ⚠️  Could not pick an option for "${questionText}". Skipping.`);
+          continue;
+        }
+
+        const chosenNorm = chosen.trim().toLowerCase();
+        const matchedOption =
+          optionTexts.find(o => o === chosen) ??
+          optionTexts.find(o => o.trim().toLowerCase() === chosenNorm);
+
+        if (!matchedOption) {
+          console.log(`  ⚠️  AI returned "${chosen}" which does not match any option. Skipping.`);
+          continue;
+        }
+
+        // Compute a unique prefix: truncate at the first " (" if present.
+        const parenIdx = matchedOption.indexOf(' (');
+        const candidatePrefix = (parenIdx >= 0 ? matchedOption.slice(0, parenIdx) : matchedOption).trim();
+        const candidateLower = candidatePrefix.toLowerCase();
+
+        const isUniquePrefix = optionTexts.every(
+          o => o === matchedOption || !o.trim().toLowerCase().startsWith(candidateLower)
+        );
+
+        const typeText = isUniquePrefix ? candidatePrefix : matchedOption;
       } catch (error) {
         console.log(`  ⚠️  Error processing a combobox: ${error}`);
         continue;
