@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ResumeData } from '../config/resume-data';
+import { PREFERENCES } from '../config/answer-preferences';
+import { classifyQuestion } from './utils/question-classifier';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -165,6 +167,112 @@ IMPORTANT: Answer ONLY with "Yes" or "No" - nothing else. Consider the applicant
       console.log(`  ⚠️  Failed to generate AI Yes/No answer: ${error}`);
       return null;
     }
+  }
+
+  /**
+   * Ask the AI to pick exactly one option from a list, given the question text.
+   * Returns the verbatim chosen option string, or null if the AI is disabled
+   * and no fallback applies.
+   *
+   * Fallback strategy (in order):
+   *   1. If AI returns a string that doesn't exactly match any option, retry once with stricter instructions.
+   *   2. If still no match, classify the question; for 'howDidYouHear', return the
+   *      option matching PREFERENCES.defaults.howDidYouHear (case-insensitive).
+   *   3. If any option equals PREFERENCES.defaults.other (case-insensitive), return it.
+   *   4. Otherwise return null (caller should log + skip).
+   */
+  async pickFromOptions(question: string, options: string[]): Promise<string | null> {
+    if (options.length === 0) {
+      return null;
+    }
+
+    const fallback = (): string | null => {
+      const category = classifyQuestion(question);
+
+      const findCaseInsensitive = (target: string) =>
+        options.find(o => o.toLowerCase() === target.toLowerCase()) ?? null;
+
+      if (category === 'howDidYouHear') {
+        return findCaseInsensitive(PREFERENCES.defaults.howDidYouHear)
+            ?? findCaseInsensitive(PREFERENCES.defaults.other);
+      }
+      if (category === 'other') {
+        return findCaseInsensitive(PREFERENCES.defaults.other);
+      }
+      return null;
+    };
+
+    if (!this.client || !this.resumeData.aiConfig?.enabled) {
+      return fallback();
+    }
+
+    const client = this.client;
+    const { personalInfo, preferences, aiConfig } = this.resumeData;
+    const background = aiConfig.background || 'I am a software engineer looking for new opportunities.';
+    const tone = PREFERENCES.tone;
+    const maxTokens = aiConfig.maxTokens || 200;
+
+    const askModel = async (strict: boolean): Promise<string | null> => {
+      try {
+        const optionList = options.map((o, i) => `${i + 1}. ${o}`).join('\n');
+
+        const instruction = strict
+          ? 'CRITICAL: Respond with the EXACT text of one option, copy-paste from the list above. No extra words, no quotes, no numbering.'
+          : 'Respond with the exact text of the option you choose. Do not add quotes, numbering, or explanation.';
+
+        const prompt = `You are helping fill out a job application. Pick exactly ONE option from the list below.
+
+Applicant background:
+${background}
+
+Name: ${personalInfo.firstName} ${personalInfo.lastName}
+Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
+Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
+
+Tone preference: ${tone} (pick the strongest plausible option that the resume supports; do not overclaim).
+
+Question: ${question}
+
+Options:
+${optionList}
+
+${instruction}`;
+
+        const messageContent: Array<any> = [];
+        if (this.resumeBase64) {
+          messageContent.push({
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: this.resumeBase64 },
+          });
+        }
+        messageContent.push({ type: 'text', text: prompt });
+
+        const message = await client.messages.create({
+          model: 'claude-sonnet-4-5',
+          max_tokens: maxTokens,
+          messages: [{ role: 'user', content: messageContent }],
+        });
+
+        const textContent = message.content.find(block => block.type === 'text');
+        if (!textContent || textContent.type !== 'text') return null;
+
+        const raw = textContent.text.trim();
+        const match = options.find(o => o === raw)
+          ?? options.find(o => o.toLowerCase() === raw.toLowerCase());
+        return match ?? null;
+      } catch (error) {
+        console.log(`  ⚠️  Failed to pick option via AI: ${error}`);
+        return null;
+      }
+    };
+
+    const first = await askModel(false);
+    if (first) return first;
+
+    const second = await askModel(true);
+    if (second) return second;
+
+    return fallback();
   }
 
   isEnabled(): boolean {

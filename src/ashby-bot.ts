@@ -1146,6 +1146,9 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         }
       }
 
+      // Fill any required radio groups that the per-field handlers above didn't catch
+      await this.fillRequiredRadioGroups();
+
     } catch (error) {
       console.log('  ℹ️  No additional questions or unable to auto-fill');
     }
@@ -1176,6 +1179,11 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
           console.log(`  ❌ ${errorText}`);
         }
       }
+
+      // Try radio groups first — many "Missing entry" errors are actually radio groups
+      // that the pre-submit pass missed. Filling them here lets the per-field recovery
+      // below focus on text/checkbox fields.
+      await this.fillRequiredRadioGroups();
 
       // For each missing field, try to find and fill it using AI
       for (const errorMsg of errorMessages) {
@@ -1420,6 +1428,121 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * Find all required radio-group <fieldset> elements that are not yet answered,
+   * ask the AI to pick the best option, and click the matching label.
+   *
+   * AshbyHQ radio groups look like:
+   *   <fieldset>
+   *     <label class="...ashby-application-form-question-title _required_*">Question?</label>
+   *     <div class="_option_*">
+   *       <input type="radio" id="..." name="..." />
+   *       <label for="...">Option text</label>
+   *     </div>
+   *     ... more options ...
+   *   </fieldset>
+   *
+   * The `_required_` class lives on the question <label>, NOT on the <input> elements,
+   * so this method scans for fieldsets directly instead of relying on aria-required.
+   */
+  private async fillRequiredRadioGroups(): Promise<void> {
+    if (!this.page) return;
+
+    console.log('🔘 Scanning for required radio-group questions...');
+
+    // Find fieldsets whose first descendant label carries the required class.
+    // The class name uses a CSS-Modules hash (e.g. `_required_101oc_92`), so match by prefix.
+    const fieldsets = await this.page.locator('fieldset').all();
+
+    let processed = 0;
+    let filled = 0;
+
+    for (const fieldset of fieldsets) {
+      try {
+        const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
+        const titleCount = await titleLabel.count();
+        if (titleCount === 0) continue;
+
+        const classAttr = await titleLabel.getAttribute('class') ?? '';
+        const classList = classAttr.split(/\s+/);
+        const isRequired = classList.some(c => /^_required_/.test(c));
+        if (!isRequired) continue;
+
+        // Skip if already answered
+        const checkedRadios = await fieldset.locator('input[type="radio"]:checked').count();
+        if (checkedRadios > 0) continue;
+
+        const questionText = (await titleLabel.textContent())?.trim() ?? '';
+        if (!questionText) continue;
+
+        // Extract options: each <input type="radio"> with its sibling <label>
+        const radios = await fieldset.locator('input[type="radio"]').all();
+        const options: { inputId: string; text: string }[] = [];
+        for (const radio of radios) {
+          const inputId = await radio.getAttribute('id');
+          if (!inputId) continue;
+          const labelLocator = this.page.locator(`label[for="${inputId}"]`).first();
+          const labelText = (await labelLocator.textContent())?.trim() ?? '';
+          if (labelText) {
+            options.push({ inputId, text: labelText });
+          }
+        }
+
+        if (options.length === 0) {
+          console.log(`  ⚠️  Required radio group "${questionText}" has no extractable options.`);
+          continue;
+        }
+
+        processed++;
+        console.log(`  ❓ ${questionText}`);
+        console.log(`     Options: ${options.map(o => o.text).join(' | ')}`);
+
+        const chosen = await this.aiGenerator.pickFromOptions(questionText, options.map(o => o.text));
+
+        if (!chosen) {
+          console.log(`  ⚠️  Could not pick an option for "${questionText}". Skipping.`);
+          continue;
+        }
+
+        const chosenNorm = chosen.trim().toLowerCase();
+        const target = options.find(o => o.text === chosen)
+          ?? options.find(o => o.text.trim().toLowerCase() === chosenNorm);
+        if (!target) {
+          console.log(`  ⚠️  AI returned "${chosen}" which does not match any option. Skipping.`);
+          continue;
+        }
+
+        // Click the label (the input is custom-styled and may be visually hidden)
+        const labelToClick = this.page.locator(`label[for="${target.inputId}"]`).first();
+        await labelToClick.click({ timeout: 5000 }).catch(async () => {
+          const input = this.page!.locator(`input[id="${target.inputId}"]`).first();
+          const ariaDisabled = await input.getAttribute('aria-disabled').catch(() => null);
+          if (ariaDisabled === 'true') {
+            console.log(`  ⚠️  Radio "${target.text}" is aria-disabled; not forcing check.`);
+            return;
+          }
+          await input.check({ force: true, timeout: 5000 }).catch(err => {
+            console.log(`  ⚠️  Fallback check failed for "${target.text}": ${err}`);
+          });
+        });
+
+        // Verify it's checked
+        const verifyChecked = await this.page.locator(`input[id="${target.inputId}"]:checked`).count();
+        if (verifyChecked > 0) {
+          console.log(`  ✅ Selected "${target.text}" for "${questionText}"`);
+          filled++;
+        } else {
+          console.log(`  ⚠️  Clicked but radio is not checked for "${questionText}"`);
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Error processing a radio group: ${error}`);
+        continue;
+      }
+    }
+
+    console.log(`🔘 Radio-group pass: ${filled}/${processed} answered`);
   }
 
   async fillEmptyRequiredFields(): Promise<void> {
