@@ -138,3 +138,15 @@ Consistent with the radio handler's voice:
 - **Short unique prefix vs. full label verbatim.** Chose prefix with verbatim fallback. Ashby option labels often have parenthetical suffixes that the autocomplete filter may not match literally; truncating at ` (` gives a cleaner search string. The uniqueness check guards against ambiguous prefixes.
 - **Lenient verify (`startsWith`) vs. strict equality.** Chose lenient. Some Ashby comboboxes set `input.value` to the typed prefix; others set it to the full canonical label. Both count as a successful selection.
 - **Retry vs. fail loud.** Chose fail loud. The post-submit `handleValidationErrors()` loop is the safety net; retrying inside the per-fieldset loop would hide intermittent issues without changing the eventual outcome.
+
+## Implementation Notes
+
+A change to the open-detection strategy was needed during the manual end-to-end run. The originally specified approach — `combobox.click()` followed by a `MutationObserver` waiting for `aria-expanded="true"` on the input — produced `Combobox for "<question>" did not open` warnings on the siftstack work-authorization combobox even though the listbox was actually opening. On at least some Ashby comboboxes, `aria-expanded` either does not flip when the listbox opens or flips at a moment that doesn't line up with the observer attachment.
+
+The shipped implementation (commit `bb625dd`) replaces that flow with:
+
+1. `combobox.click()` to open.
+2. `combobox.press('ArrowDown')` as belt-and-suspenders for combobox libraries that listen only to keyboard events.
+3. `page.locator('[role="listbox"]:visible').first().waitFor({ state: 'visible', timeout: 2000 })` as the open signal — wait for the artifact we actually care about, not a proxy attribute.
+
+This also removed the `MutationObserver` plus the `@ts-ignore` / `eslint-disable-next-line` pair, since the new path stays on the Node side and never reaches into `page.evaluate`. Future combobox-shaped widgets in Ashby (or other ATSes) should use the same "wait for the listbox to be visible" approach by default; `aria-expanded` should be treated as advisory, not authoritative.
