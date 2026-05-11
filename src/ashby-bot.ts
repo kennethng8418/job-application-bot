@@ -8,9 +8,11 @@ import * as fs from 'fs';
 
 interface SubmissionResult {
   success: boolean;
+  status: 'success' | 'error' | 'unknown';
   message: string;
   screenshotPath?: string;
   confirmationNumber?: string;
+  errorDetails?: string;
 }
 
 export class AshbyJobApplicationBot extends BaseApplicationBot {
@@ -1824,6 +1826,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
       return {
         success: true,
+        status: 'success',
         message: confirmationNumber
           ? `Application submitted! Confirmation: ${confirmationNumber}`
           : 'Application submitted successfully',
@@ -1841,8 +1844,10 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
       return {
         success: false,
+        status: 'error',
         message: `Submission failed: ${error}`,
-        screenshotPath
+        screenshotPath,
+        errorDetails: error
       };
     }
 
@@ -1852,6 +1857,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
     return {
       success: false,
+      status: 'unknown',
       message: 'Submission status unknown - please verify manually',
       screenshotPath
     };
