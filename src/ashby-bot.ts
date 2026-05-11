@@ -1442,12 +1442,13 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
     for (const fieldset of fieldsets) {
       try {
-        const titleLabel = fieldset.locator('label.ashby-application-form-question-title').first();
+        const titleLabel = fieldset.locator(':scope > label.ashby-application-form-question-title').first();
         const titleCount = await titleLabel.count();
         if (titleCount === 0) continue;
 
         const classAttr = await titleLabel.getAttribute('class') ?? '';
-        const isRequired = /_required_/.test(classAttr);
+        const classList = classAttr.split(/\s+/);
+        const isRequired = classList.some(c => /^_required_/.test(c));
         if (!isRequired) continue;
 
         // Skip if already answered
@@ -1486,7 +1487,9 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
           continue;
         }
 
-        const target = options.find(o => o.text === chosen);
+        const chosenNorm = chosen.trim().toLowerCase();
+        const target = options.find(o => o.text === chosen)
+          ?? options.find(o => o.text.trim().toLowerCase() === chosenNorm);
         if (!target) {
           console.log(`  ⚠️  AI returned "${chosen}" which does not match any option. Skipping.`);
           continue;
@@ -1495,9 +1498,15 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         // Click the label (the input is custom-styled and may be visually hidden)
         const labelToClick = this.page.locator(`label[for="${target.inputId}"]`).first();
         await labelToClick.click({ timeout: 5000 }).catch(async () => {
-          // Fallback: try clicking the input directly via JS
           const input = this.page!.locator(`input[id="${target.inputId}"]`).first();
-          await input.check({ force: true, timeout: 5000 }).catch(() => {});
+          const ariaDisabled = await input.getAttribute('aria-disabled').catch(() => null);
+          if (ariaDisabled === 'true') {
+            console.log(`  ⚠️  Radio "${target.text}" is aria-disabled; not forcing check.`);
+            return;
+          }
+          await input.check({ force: true, timeout: 5000 }).catch(err => {
+            console.log(`  ⚠️  Fallback check failed for "${target.text}": ${err}`);
+          });
         });
 
         // Verify it's checked
