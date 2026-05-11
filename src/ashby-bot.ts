@@ -1580,36 +1580,23 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         const questionText = (await titleLabel.textContent())?.trim() ?? '';
         if (!questionText) continue;
 
-        // Open the listbox
+        // Open the listbox. Click first; some Ashby comboboxes also require an
+        // ArrowDown to open, so press it as belt-and-suspenders (no-op if the
+        // click already opened the menu).
         await combobox.click({ timeout: 5000 });
+        await combobox.press('ArrowDown').catch(() => {});
 
-        // Wait for aria-expanded to flip
-        const expanded = await combobox
-          .evaluate(
-            (el, ms) =>
-              new Promise<boolean>(resolve => {
-                const check = () => el.getAttribute('aria-expanded') === 'true';
-                if (check()) return resolve(true);
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore – MutationObserver is a browser global; this code runs inside page.evaluate
-                const observer = new MutationObserver(() => {
-                  if (check()) {
-                    observer.disconnect();
-                    resolve(true);
-                  }
-                });
-                observer.observe(el, { attributes: true, attributeFilter: ['aria-expanded'] });
-                setTimeout(() => {
-                  observer.disconnect();
-                  resolve(check());
-                }, ms);
-              }),
-            2000
-          )
+        // Wait for the listbox itself to become visible. More reliable than
+        // watching aria-expanded, which some implementations don't flip.
+        const listboxAppeared = await this.page
+          .locator('[role="listbox"]:visible')
+          .first()
+          .waitFor({ state: 'visible', timeout: 2000 })
+          .then(() => true)
           .catch(() => false);
 
-        if (!expanded) {
-          console.log(`  ⚠️  Combobox for "${questionText}" did not open (aria-expanded never became true). Skipping.`);
+        if (!listboxAppeared) {
+          console.log(`  ⚠️  Combobox for "${questionText}" did not open (no visible listbox appeared). Skipping.`);
           continue;
         }
 
