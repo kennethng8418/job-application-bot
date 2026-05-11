@@ -4,12 +4,14 @@ const HOW_DID_YOU_HEAR_PATTERNS = [
   /how did you hear/i,
   /where did you hear/i,
   /how did you find/i,
+  /where did you find/i,
   /how did you learn about/i,
+  /how did you come across/i,
 ];
 
 const OTHER_PATTERNS = [
   /which best applies to you/i,
-  /which (of these )?best describes/i,
+  /which (of (these|the following) )?best describes/i,
 ];
 
 export function classifyQuestion(question: string): QuestionCategory {
