@@ -1670,6 +1670,33 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         );
 
         const typeText = isUniquePrefix ? candidatePrefix : matchedOption;
+
+        // Clear any partial state and type the prefix slowly enough for the
+        // autocomplete filter to react.
+        await combobox.fill('');
+        await combobox.type(typeText, { delay: 30 });
+
+        // Give the listbox a moment to narrow before pressing Enter.
+        await this.page.waitForTimeout(200);
+        await combobox.press('Enter');
+        await this.page.waitForTimeout(300);
+
+        const finalValue = (await combobox.inputValue()).trim();
+        const finalLower = finalValue.toLowerCase();
+        const matchedLower = matchedOption.toLowerCase();
+        const verified =
+          finalLower === matchedLower ||
+          finalLower.startsWith(matchedLower) ||
+          matchedLower.startsWith(finalLower);
+
+        if (verified && finalValue.length > 0) {
+          console.log(`  ✅ Selected "${matchedOption}" for "${questionText}"`);
+          filled++;
+        } else {
+          console.log(
+            `  ⚠️  Combobox value did not update after selecting "${matchedOption}" for "${questionText}" (current value: "${finalValue}")`
+          );
+        }
       } catch (error) {
         console.log(`  ⚠️  Error processing a combobox: ${error}`);
         continue;
