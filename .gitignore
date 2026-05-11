@@ -39,5 +39,9 @@ playwright/.cache/
 # Video recordings
 recordings/
 
+# Screenshots and logs
+screenshots/
+logs/
+
 # Personal data (don't commit your actual resume data)
 config/resume-data.ts
