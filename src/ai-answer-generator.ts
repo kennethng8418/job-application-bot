@@ -188,12 +188,17 @@ IMPORTANT: Answer ONLY with "Yes" or "No" - nothing else. Consider the applicant
 
     const fallback = (): string | null => {
       const category = classifyQuestion(question);
+
+      const findCaseInsensitive = (target: string) =>
+        options.find(o => o.toLowerCase() === target.toLowerCase()) ?? null;
+
       if (category === 'howDidYouHear') {
-        const match = options.find(o => o.toLowerCase() === PREFERENCES.defaults.howDidYouHear.toLowerCase());
-        if (match) return match;
+        return findCaseInsensitive(PREFERENCES.defaults.howDidYouHear)
+            ?? findCaseInsensitive(PREFERENCES.defaults.other);
       }
-      const otherMatch = options.find(o => o.toLowerCase() === PREFERENCES.defaults.other.toLowerCase());
-      if (otherMatch) return otherMatch;
+      if (category === 'other') {
+        return findCaseInsensitive(PREFERENCES.defaults.other);
+      }
       return null;
     };
 
@@ -201,12 +206,14 @@ IMPORTANT: Answer ONLY with "Yes" or "No" - nothing else. Consider the applicant
       return fallback();
     }
 
+    const client = this.client;
+    const { personalInfo, preferences, aiConfig } = this.resumeData;
+    const background = aiConfig.background || 'I am a software engineer looking for new opportunities.';
+    const tone = PREFERENCES.tone;
+    const maxTokens = aiConfig.maxTokens || 200;
+
     const askModel = async (strict: boolean): Promise<string | null> => {
       try {
-        const { personalInfo, preferences, aiConfig } = this.resumeData;
-        const background = aiConfig?.background || 'I am a software engineer looking for new opportunities.';
-        const tone = PREFERENCES.tone;
-
         const optionList = options.map((o, i) => `${i + 1}. ${o}`).join('\n');
 
         const instruction = strict
@@ -240,9 +247,9 @@ ${instruction}`;
         }
         messageContent.push({ type: 'text', text: prompt });
 
-        const message = await this.client!.messages.create({
+        const message = await client.messages.create({
           model: 'claude-sonnet-4-5',
-          max_tokens: 200,
+          max_tokens: maxTokens,
           messages: [{ role: 'user', content: messageContent }],
         });
 
@@ -251,8 +258,7 @@ ${instruction}`;
 
         const raw = textContent.text.trim();
         const match = options.find(o => o === raw)
-          ?? options.find(o => o.toLowerCase() === raw.toLowerCase())
-          ?? options.find(o => raw.toLowerCase().includes(o.toLowerCase()));
+          ?? options.find(o => o.toLowerCase() === raw.toLowerCase());
         return match ?? null;
       } catch (error) {
         console.log(`  ⚠️  Failed to pick option via AI: ${error}`);
