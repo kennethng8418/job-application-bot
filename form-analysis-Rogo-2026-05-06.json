@@ -1,0 +1,156 @@
+{
+  "jobUrl": "https://jobs.ashbyhq.com/Rogo/71849dc9-85cb-4daa-ac47-a819b11b2ce0/application?src=LinkedIn",
+  "jobTitle": "Staff Software Engineer: Platform",
+  "company": "Rogo",
+  "analyzedAt": "2026-05-06T01:50:30.152Z",
+  "fields": [
+    {
+      "type": "text",
+      "label": "Name",
+      "name": "_systemfield_name",
+      "id": "_systemfield_name",
+      "required": true,
+      "placeholder": "Type here...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "text",
+      "label": "Linkedin URL",
+      "name": "c626e018-cd13-4e86-8c32-90b61320448f",
+      "id": "c626e018-cd13-4e86-8c32-90b61320448f",
+      "required": true,
+      "placeholder": "Type here...",
+      "detectedCategory": "Personal Information"
+    },
+    {
+      "type": "email",
+      "label": "Email",
+      "name": "_systemfield_email",
+      "id": "_systemfield_email",
+      "required": true,
+      "placeholder": "hello@example.com...",
+      "detectedCategory": "Personal Information"
+    },
+    {
+      "type": "text",
+      "label": "Where did you go to University?",
+      "name": "659e6a7d-c9e9-4def-a98c-c5612f4e4810",
+      "id": "659e6a7d-c9e9-4def-a98c-c5612f4e4810",
+      "required": true,
+      "placeholder": "Type here...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "text",
+      "label": "Start typing...",
+      "required": false,
+      "placeholder": "Start typing...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "text",
+      "label": "Start typing...",
+      "required": false,
+      "placeholder": "Start typing...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "textarea",
+      "label": "Why are you interested in Rogo?",
+      "name": "9ece1f92-01ca-4e10-a8cb-f8b5420c1968",
+      "id": "9ece1f92-01ca-4e10-a8cb-f8b5420c1968",
+      "required": true,
+      "placeholder": "Type here...",
+      "detectedCategory": "Open-ended Questions"
+    },
+    {
+      "type": "textarea",
+      "label": "What is something interesting that you've been learning about recently? (Does not have to be technical or work-related)",
+      "name": "77a86761-9634-4a34-a7c3-93c21812e128",
+      "id": "77a86761-9634-4a34-a7c3-93c21812e128",
+      "required": false,
+      "placeholder": "Type here...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "textarea",
+      "label": "Tell me about a time you noticed an important problem that no one had explicitly assigned to you. What did you do?",
+      "name": "bb4ed4c2-d1e1-4fec-a377-d709f1fd8766",
+      "id": "bb4ed4c2-d1e1-4fec-a377-d709f1fd8766",
+      "required": false,
+      "placeholder": "Type here...",
+      "detectedCategory": "Other"
+    },
+    {
+      "type": "file",
+      "label": "File upload",
+      "required": false,
+      "description": "application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.oasis.opendocument.text,.odt,application/rtf,.rtf",
+      "detectedCategory": "Documents"
+    },
+    {
+      "type": "file",
+      "label": "Please Upload Your Resume",
+      "id": "_systemfield_resume",
+      "required": true,
+      "description": "application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.oasis.opendocument.text,.odt,application/rtf,.rtf,image/*,video/*,audio/*",
+      "detectedCategory": "Documents"
+    },
+    {
+      "type": "yesno-button",
+      "label": "Are you able, willing, and excited to work full-time in an office?",
+      "required": true,
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "detectedCategory": "Work Preferences"
+    },
+    {
+      "type": "radio",
+      "label": "Are you legally authorized to work in the U.S.?",
+      "required": true,
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "detectedCategory": "Work Authorization"
+    },
+    {
+      "type": "radio",
+      "label": "Will you now or in the future require sponsorship for an immigration-related employement benefit?",
+      "required": true,
+      "options": [
+        "Yes",
+        "No"
+      ],
+      "description": "Note: For purposes of this question, \"sponsorship for an immigration-related employment benefit\" means \"an H-1B visa petition, an O-1 visa petition, an E-3 visa petition, TN status and 'job flexibility benefits' (also known as I-140 portability or adjustment of status portability) for long-delayed adjustment of status applications that have been pending for 180 days or longer.\" (Please ask us if you are uncertain whether you may need immigration sponsorship or desire clarification). Responding “Yes” to this question will not preclude you from consideration for employment.",
+      "detectedCategory": "Work Authorization"
+    }
+  ],
+  "summary": {
+    "totalFields": 14,
+    "requiredFields": 9,
+    "optionalFields": 5,
+    "fieldsByType": {
+      "text": 5,
+      "email": 1,
+      "textarea": 3,
+      "file": 2,
+      "yesno-button": 1,
+      "radio": 2
+    },
+    "fieldsByCategory": {
+      "Other": 6,
+      "Personal Information": 2,
+      "Open-ended Questions": 1,
+      "Documents": 2,
+      "Work Preferences": 1,
+      "Work Authorization": 2
+    },
+    "hasResumeUpload": true,
+    "hasCoverLetter": false,
+    "hasEEOC": false,
+    "hasVisaQuestions": true
+  }
+}
