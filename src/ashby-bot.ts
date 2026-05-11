@@ -1674,7 +1674,7 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
         // Clear any partial state and type the prefix slowly enough for the
         // autocomplete filter to react.
         await combobox.fill('');
-        await combobox.type(typeText, { delay: 30 });
+        await combobox.pressSequentially(typeText, { delay: 30 });
 
         // Give the listbox a moment to narrow before pressing Enter.
         await this.page.waitForTimeout(200);
