@@ -6,6 +6,7 @@ import type { ResumeData } from '../config/resume-data';
 import { AIAnswerGenerator } from './ai-answer-generator';
 import { FieldResolver } from './greenhouse/field-resolver';
 import type { Field } from './greenhouse/types';
+import { matchEEOOption } from './greenhouse/eeo-options';
 import {
   SELECTORS,
   MAX_RESUME_BYTES,
@@ -246,36 +247,34 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       case 'textarea':
         await field.element.fill(value);
         break;
-      case 'select':
-        await field.element.selectOption({ label: value }).catch(async () => {
-          await field.element.selectOption({ value }).catch(() => {});
+      case 'select': {
+        const matched = matchEEOOption(field.options, value);
+        const labelToUse = matched ?? value;
+        await field.element.selectOption({ label: labelToUse }).catch(async () => {
+          await field.element.selectOption({ value: labelToUse }).catch(() => {});
         });
         break;
+      }
       case 'combobox':
         await field.element.click();
         if (this.page) {
-          // Wait briefly for dropdown options to render after the click
           await this.page
             .locator('[role="option"]')
             .first()
             .waitFor({ state: 'visible', timeout: 3000 })
             .catch(() => null);
 
-          // Try exact match first (case-insensitive), then substring fallback
           const allOptions = this.page.locator('[role="option"]');
-          const exactCount = await allOptions.count();
-          let picked = false;
-          for (let i = 0; i < exactCount; i++) {
-            const optText = ((await allOptions.nth(i).textContent()) ?? '').trim();
-            if (optText.toLowerCase() === value.toLowerCase()) {
-              await allOptions.nth(i).click();
-              picked = true;
-              break;
-            }
+          const optCount = await allOptions.count();
+          const optionTexts: string[] = [];
+          for (let i = 0; i < optCount; i++) {
+            optionTexts.push(((await allOptions.nth(i).textContent()) ?? '').trim());
           }
-          if (!picked) {
-            const fallback = this.page.locator('[role="option"]').filter({ hasText: value }).first();
-            if ((await fallback.count()) > 0) await fallback.click();
+
+          const matched = matchEEOOption(optionTexts, value);
+          if (matched) {
+            const idx = optionTexts.indexOf(matched);
+            await allOptions.nth(idx).click();
           }
         }
         break;
@@ -283,6 +282,9 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
         if (this.page) {
           const groupName = await field.element.getAttribute('name');
           if (groupName) {
+            const matched = matchEEOOption(field.options, value);
+            const labelToMatch = (matched ?? value).toLowerCase();
+
             const groupInputs = this.page.locator(`input[name="${groupName}"]`);
             const count = await groupInputs.count();
             for (let i = 0; i < count; i++) {
@@ -291,7 +293,7 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
               if (!id) continue;
               const labelEl = this.page.locator(`label[for="${id}"]`).first();
               const labelText = ((await labelEl.textContent()) ?? '').trim();
-              if (labelText.toLowerCase() === value.toLowerCase()) {
+              if (labelText.toLowerCase() === labelToMatch) {
                 await radio.check();
                 break;
               }
