@@ -138,6 +138,7 @@ Applicant Profile:
 - Work Location: ${preferences.workLocation || personalInfo.location}
 - Sponsorship Required: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
 - US Citizen: ${preferences.usCitizen ? 'Yes' : 'No'}
+- Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 - Start Date: ${preferences.startDate || 'Flexible'}
 
 Question: ${question}
