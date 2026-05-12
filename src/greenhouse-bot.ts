@@ -56,13 +56,6 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
     if (!this.page) throw new Error('page not ready');
     let fields = await this.enumerateFields();
 
-    const phoneFields = fields.filter(f => /^phone$/i.test(f.label));
-    const isPhoneFor = (label: string, idx: number): 'first' | 'second' | 'only' | false => {
-      if (!/^phone$/i.test(label)) return false;
-      if (phoneFields.length === 1) return 'only';
-      return idx === 0 ? 'first' : 'second';
-    };
-
     const countryField = fields.find(f => /^country$/i.test(f.label));
     const universalLabels = /^(first name|last name|email)$/i;
 
@@ -80,9 +73,13 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
     }
 
     const refreshedPhones = fields.filter(f => /^phone$/i.test(f.label));
+    const phoneContextFor = (idx: number): 'first' | 'second' | 'only' => {
+      if (refreshedPhones.length === 1) return 'only';
+      return idx === 0 ? 'first' : 'second';
+    };
+
     for (let i = 0; i < refreshedPhones.length; i++) {
-      const ctx = isPhoneFor('Phone', i);
-      const result = this.resolver.resolve('Phone', { isPhone: ctx });
+      const result = this.resolver.resolve('Phone', { isPhone: phoneContextFor(i) });
       if (result.kind === 'value') await this.fillField(refreshedPhones[i], result.value);
     }
   }
@@ -99,6 +96,8 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
     for (const field of fields) {
       if (universalLabels.test(field.label)) continue;
       if (field.kind === 'file') continue;
+      // Cover letter is handled by uploadResume() (file upload) — never fill via fillField.
+      if (/cover letter/i.test(field.label)) continue;
 
       const isTextarea = field.kind === 'textarea';
       const result = await this.resolver.resolveAsync(
@@ -193,8 +192,29 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       case 'combobox':
         await field.element.click();
         if (this.page) {
-          const option = this.page.locator('[role="option"]').filter({ hasText: value }).first();
-          if ((await option.count()) > 0) await option.click();
+          // Wait briefly for dropdown options to render after the click
+          await this.page
+            .locator('[role="option"]')
+            .first()
+            .waitFor({ state: 'visible', timeout: 3000 })
+            .catch(() => null);
+
+          // Try exact match first (case-insensitive), then substring fallback
+          const allOptions = this.page.locator('[role="option"]');
+          const exactCount = await allOptions.count();
+          let picked = false;
+          for (let i = 0; i < exactCount; i++) {
+            const optText = ((await allOptions.nth(i).textContent()) ?? '').trim();
+            if (optText.toLowerCase() === value.toLowerCase()) {
+              await allOptions.nth(i).click();
+              picked = true;
+              break;
+            }
+          }
+          if (!picked) {
+            const fallback = this.page.locator('[role="option"]').filter({ hasText: value }).first();
+            if ((await fallback.count()) > 0) await fallback.click();
+          }
         }
         break;
       case 'radio':
