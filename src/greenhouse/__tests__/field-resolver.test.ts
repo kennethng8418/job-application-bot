@@ -279,3 +279,57 @@ test('Pattern: random label returns unresolved', () => {
   const result = r.resolve('Favorite Pizza Topping', { isPhone: false });
   assert.equal(result.kind, 'unresolved');
 });
+
+test('EEO: Gender from resumeData', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Gender', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Male' });
+});
+
+test('EEO: Hispanic/Latino from resumeData', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Are you Hispanic/Latino?', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('EEO: Race from resumeData', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Race & Ethnicity', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Asian (Not Hispanic or Latino)' });
+});
+
+test('EEO: Veteran from resumeData', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Veteran Status', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'I am not a protected veteran' });
+});
+
+test('EEO: Disability defaults to "I do not want to answer" when unset', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Disability Status', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'I do not want to answer' });
+});
+
+test('EEO: Gender defaults to Decline when unset', () => {
+  const noGender: ResumeData = {
+    ...baseResumeData,
+    personalInfo: { ...baseResumeData.personalInfo, gender: undefined },
+  };
+  const r = new FieldResolver(noGender);
+  const result = r.resolve('Gender', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Decline to self-identify' });
+});
+
+test('EEO: LGBTQ+ → Prefer not to answer (no resumeData source)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('I consider myself a member of the LGBTQ+ community.', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'Prefer not to answer' });
+});
+
+test('EEO: Gender Identity (extra voluntary) → Prefer not to answer', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Gender Identity', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Prefer not to answer' });
+});

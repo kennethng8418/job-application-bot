@@ -1,6 +1,7 @@
 import type { ResumeData } from '../../config/resume-data';
 import type { ResolverContext, ResolverResult } from './types';
 import { PREFERENCES } from '../../config/answer-preferences';
+import { EEO_DEFAULTS } from './eeo-options';
 
 function normalizeTechKey(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -40,8 +41,34 @@ export class FieldResolver {
     const label = normalizeLabel(rawLabel);
     const staticResult = this.tryStatic(label, ctx);
     if (staticResult.kind !== 'unresolved') return staticResult;
+    const eeoResult = this.tryEEO(label);
+    if (eeoResult.kind !== 'unresolved') return eeoResult;
     const patternResult = this.tryPattern(label);
     if (patternResult.kind !== 'unresolved') return patternResult;
+    return { kind: 'unresolved' };
+  }
+
+  private tryEEO(label: string): ResolverResult {
+    const { personalInfo } = this.resumeData;
+
+    if (label === 'gender') {
+      return { kind: 'value', value: personalInfo.gender ?? EEO_DEFAULTS.gender };
+    }
+    if (/hispanic|latino/.test(label)) {
+      return { kind: 'value', value: personalInfo.hispanicLatino ?? EEO_DEFAULTS.hispanicLatino };
+    }
+    if (/^race|race.*ethnicity|race and ethnicity|i identify my race|race & ethnicity/.test(label)) {
+      return { kind: 'value', value: personalInfo.race ?? EEO_DEFAULTS.race };
+    }
+    if (/veteran/.test(label)) {
+      return { kind: 'value', value: personalInfo.veteranStatus ?? EEO_DEFAULTS.veteranStatus };
+    }
+    if (/disability|i have a disability/.test(label)) {
+      return { kind: 'value', value: personalInfo.disabilityStatus ?? EEO_DEFAULTS.disabilityStatus };
+    }
+    if (/gender identity|lgbtq|sexual orientation|transgender/.test(label)) {
+      return { kind: 'value', value: 'Prefer not to answer' };
+    }
     return { kind: 'unresolved' };
   }
 
