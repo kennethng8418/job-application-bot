@@ -230,6 +230,7 @@ ${background}
 Name: ${personalInfo.firstName} ${personalInfo.lastName}
 Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
 Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
+Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 
 Tone preference: ${tone} (pick the strongest plausible option that the resume supports; do not overclaim).
 
