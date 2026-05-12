@@ -92,3 +92,190 @@ test('StaticFieldMap: unknown label returns unresolved', () => {
   const result = r.resolve('Favorite Color', { isPhone: false });
   assert.equal(result.kind, 'unresolved');
 });
+
+test('Pattern: LinkedIn Profile', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('LinkedIn Profile', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'https://linkedin.com/in/test' });
+});
+
+test('Pattern: GitHub Profile', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('GitHub Profile', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'https://github.com/test' });
+});
+
+test('Pattern: Website', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Website', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'https://test.example' });
+});
+
+test('Pattern: Preferred First Name → firstName', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Preferred First Name', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Test' });
+});
+
+test('Pattern: sponsorship Yes (Courier Health phrasing)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Will you now or in the future require sponsorship for a U.S. employment visa (e.g. H-1B)?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: legally authorized (Chime phrasing)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Are you currently eligible to work legally in the United States of America?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: current location', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Where are you currently located (city, state)?', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'New York City, NY' });
+});
+
+test('Pattern: onsite/hybrid (Courier Health phrasing)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'This role is 4x a week in our NYC office. Are you open to being onsite?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: salary', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('What is your expected annual base salary?', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: '$150,000' });
+});
+
+test('Pattern: how did you hear → PREFERENCES default LinkedIn', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('How did you hear about this job?', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'LinkedIn' });
+});
+
+test('Pattern: years of C#/.NET → looks up yearsOfExperienceByTech', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Years of C#/.NET Development Experience', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: '3' });
+});
+
+test('Pattern: years of React → looks up yearsOfExperienceByTech', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Years of React Development Experience', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: '2' });
+});
+
+test('Pattern: years of unknown tech → unresolved (falls through to AI)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Years of Rust Experience', { isPhone: false });
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('Pattern: interviewed previously → No', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Have you interviewed with us in the past six months to a year?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: restrictive covenant → No', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Are you currently subject to any agreement with a former employer that may limit your duties?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: privacy policy → Yes', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Acknowledge Recruitment Privacy Policy', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: affirmation checkbox → true', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'I affirm that all statements and information provided are accurate',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'true' });
+});
+
+test('Pattern: school', () => {
+  const r = new FieldResolver({
+    ...baseResumeData,
+    personalInfo: {
+      ...baseResumeData.personalInfo,
+      education: {
+        ...baseResumeData.personalInfo.education!,
+        school: 'MIT',
+      },
+    },
+  });
+  const result = r.resolve('School', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'MIT' });
+});
+
+test('Pattern: degree', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Degree', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: "Bachelor's Degree" });
+});
+
+test('Pattern: discipline', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Discipline', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'Computer Science' });
+});
+
+test('Pattern: ITAR → U.S. Citizen', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('ITAR eligibility status', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'U.S. Citizen' });
+});
+
+test('Pattern: Location (City)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Location (City)', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: 'New York City, NY' });
+});
+
+test('Pattern: start date', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('When can you start?', { isPhone: false });
+  assert.deepEqual(result, { kind: 'value', value: '2 weeks' });
+});
+
+test('Pattern: pronouns → unresolved (skipped, always optional)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Pronouns', { isPhone: false });
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('Pattern: random label returns unresolved', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Favorite Pizza Topping', { isPhone: false });
+  assert.equal(result.kind, 'unresolved');
+});
