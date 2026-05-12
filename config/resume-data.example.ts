@@ -25,6 +25,7 @@ export interface ResumeData {
     desiredSalary?: string; // e.g., "$120,000", "$100k-$150k", "Negotiable"
     usCitizen?: boolean; // Are you a US citizen?
     requiresVisaSponsorship?: boolean; // Do you require visa sponsorship?
+    willingToRelocate?: boolean; // Are you willing to relocate for the right role?
     over18?: boolean; // Are you at least 18 years of age?
     legallyAuthorizedToWork?: boolean; // Are you legally authorized to work?
   };
@@ -61,6 +62,7 @@ export const resumeData: ResumeData = {
     desiredSalary: '$150,000', // e.g., "$120,000", "$100k-$150k", "Negotiable"
     usCitizen: true, // US citizen
     requiresVisaSponsorship: false, // Don't require visa sponsorship
+    willingToRelocate: true, // Open to relocating for the right role
     over18: true, // At least 18 years old
     legallyAuthorizedToWork: true, // Legally authorized to work in US
   },

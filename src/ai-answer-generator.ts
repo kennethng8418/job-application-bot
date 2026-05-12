@@ -61,6 +61,7 @@ University: ${personalInfo.university || 'Not specified'}
 Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
 US Citizen: ${preferences.usCitizen ? 'Yes' : 'No'}
 Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
+Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 
 Question: ${question}
 
@@ -137,6 +138,7 @@ Applicant Profile:
 - Work Location: ${preferences.workLocation || personalInfo.location}
 - Sponsorship Required: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
 - US Citizen: ${preferences.usCitizen ? 'Yes' : 'No'}
+- Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 - Start Date: ${preferences.startDate || 'Flexible'}
 
 Question: ${question}
@@ -228,6 +230,7 @@ ${background}
 Name: ${personalInfo.firstName} ${personalInfo.lastName}
 Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
 Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
+Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 
 Tone preference: ${tone} (pick the strongest plausible option that the resume supports; do not overclaim).
 
