@@ -61,6 +61,7 @@ University: ${personalInfo.university || 'Not specified'}
 Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
 US Citizen: ${preferences.usCitizen ? 'Yes' : 'No'}
 Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
+Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
 
 Question: ${question}
 
