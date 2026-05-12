@@ -4,7 +4,7 @@
 
 **Goal:** Add a `willingToRelocate?: boolean` flag to the `Preferences` interface and surface it in all three AI prompts so the bot answers relocation questions correctly.
 
-**Architecture:** One new optional boolean field added to the `Preferences` interface (declared in both `config/resume-data.ts` and `config/resume-data.example.ts`). Three single-line additions in `src/ai-answer-generator.ts` — one each in `generateAnswer`, `answerYesNoQuestion`, and `pickFromOptions` — all using the same `${preferences.willingToRelocate ? 'Yes' : 'No'}` coercion alongside the existing flag-driven prompt lines.
+**Architecture:** One new optional boolean field added to the `Preferences` interface in `config/resume-data.example.ts` (the tracked file). The actual `config/resume-data.ts` is gitignored — it carries personal data and must never be committed; the user updates that file locally to match. Three single-line additions in `src/ai-answer-generator.ts` — one each in `generateAnswer`, `answerYesNoQuestion`, and `pickFromOptions` — all using the same `${preferences.willingToRelocate ? 'Yes' : 'No'}` coercion alongside the existing flag-driven prompt lines.
 
 **Tech Stack:** TypeScript, Anthropic SDK (`@anthropic-ai/sdk`).
 
@@ -16,90 +16,42 @@
 
 ## File Structure
 
-- **Modify** `config/resume-data.ts`:
+- **Modify (tracked)** `config/resume-data.example.ts`:
   - Add `willingToRelocate?: boolean` to the `Preferences` interface (after `requiresVisaSponsorship`, before `over18`).
-  - Add `willingToRelocate: true` to the `preferences` literal (in the same relative position).
-- **Modify** `config/resume-data.example.ts`:
-  - Same interface change.
-  - Same literal change (also `true` so the example is illustrative).
-- **Modify** `src/ai-answer-generator.ts`:
+  - Add `willingToRelocate: true` to the example `preferences` literal (illustrative).
+- **Modify (local-only, NOT committed)** `config/resume-data.ts`:
+  - This file is in `.gitignore` because it contains personal data. The user updates it locally to mirror the interface change so the prompt code can read `preferences.willingToRelocate`. No git commit involved.
+- **Modify (tracked)** `src/ai-answer-generator.ts`:
   - In `generateAnswer` (around line 63), add one line after `Requires Visa Sponsorship: ...`.
   - In `answerYesNoQuestion` (around line 139), add one bullet line after `- US Citizen: ...`.
   - In `pickFromOptions` (around line 230), add one line after `Requires Visa Sponsorship: ...`.
 
 No new files. No deletions. No structural refactors.
 
+> **Important:** `config/resume-data.ts` is gitignored (line 47 of `.gitignore`). Never `git add -f` it. If a subagent tries to commit it, abort and reset. The example file `config/resume-data.example.ts` is the canonical tracked file for interface changes.
+
 ---
 
-### Task 1: Add `willingToRelocate` to the canonical `Preferences` interface and literal
+### Task 0 (preamble, local-only — DO NOT commit): Update `config/resume-data.ts` on disk
+
+This step exists so the user's actual resume-data file has the new field locally. It is NOT a git commit and NOT part of the PR. If the file on disk already has the field (e.g., from a prior session), skip this step.
 
 **Files:**
-- Modify: `config/resume-data.ts`
+- Modify locally (do NOT `git add` or `git commit`): `config/resume-data.ts`
 
-- [ ] **Step 1: Add the interface field**
+- [ ] **Step 1: Mirror the same two insertions described in Task 1 below** into `config/resume-data.ts` (interface field after `requiresVisaSponsorship`; literal value `willingToRelocate: true` after `requiresVisaSponsorship: false`).
 
-Locate the `Preferences` block inside the `ResumeData` interface in `config/resume-data.ts`. It contains the line:
+- [ ] **Step 2: Verify with grep** — `grep -n "willingToRelocate" config/resume-data.ts` should show 2 matches.
 
-```typescript
-    requiresVisaSponsorship?: boolean; // Do you require visa sponsorship?
-```
+- [ ] **Step 3: Confirm the file is still gitignored** — `git check-ignore -v config/resume-data.ts` must output `.gitignore:47:config/resume-data.ts	config/resume-data.ts`. If it doesn't, STOP — something is wrong with `.gitignore` state.
 
-Insert the new field immediately after that line and before `over18?: boolean;`:
+- [ ] **Step 4: Confirm `git status` does NOT list `config/resume-data.ts`** — if it does, STOP. Never run `git add -f config/resume-data.ts`.
 
-```typescript
-    willingToRelocate?: boolean; // Are you willing to relocate for the right role?
-```
-
-The result should look like this snippet inside the interface:
-
-```typescript
-    requiresVisaSponsorship?: boolean; // Do you require visa sponsorship?
-    willingToRelocate?: boolean; // Are you willing to relocate for the right role?
-    over18?: boolean; // Are you at least 18 years of age?
-```
-
-- [ ] **Step 2: Add the literal value**
-
-In the same file, the exported `resumeData` constant has a `preferences` object containing:
-
-```typescript
-    requiresVisaSponsorship: false, // Don't require visa sponsorship
-```
-
-Insert immediately after that line, before `over18: true`:
-
-```typescript
-    willingToRelocate: true, // Open to relocating for the right role
-```
-
-The result should look like this snippet inside the literal:
-
-```typescript
-    requiresVisaSponsorship: false, // Don't require visa sponsorship
-    willingToRelocate: true, // Open to relocating for the right role
-    over18: true, // At least 18 years old
-```
-
-- [ ] **Step 3: Verify TypeScript compiles**
-
-Run: `npx tsc --noEmit`
-Expected: zero errors.
-
-- [ ] **Step 4: Verify with grep**
-
-Run: `grep -n "willingToRelocate" config/resume-data.ts`
-Expected: exactly two matches — one in the interface declaration (with `?:`), one in the literal.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add config/resume-data.ts
-git commit -m "Add willingToRelocate to Preferences interface and resume-data"
-```
+No commit. Move on to Task 1.
 
 ---
 
-### Task 2: Mirror the interface change in `resume-data.example.ts`
+### Task 1: Add `willingToRelocate` to the tracked `Preferences` interface in `resume-data.example.ts`
 
 **Files:**
 - Modify: `config/resume-data.example.ts`
@@ -167,7 +119,7 @@ git commit -m "Mirror willingToRelocate field in resume-data.example.ts"
 
 ---
 
-### Task 3: Add `Willing to Relocate` line to `generateAnswer`
+### Task 2: Add `Willing to Relocate` line to `generateAnswer`
 
 **Files:**
 - Modify: `src/ai-answer-generator.ts` (around line 63)
@@ -211,7 +163,7 @@ git commit -m "Pass willingToRelocate to generateAnswer prompt"
 
 ---
 
-### Task 4: Add `Willing to Relocate` bullet to `answerYesNoQuestion`
+### Task 3: Add `Willing to Relocate` bullet to `answerYesNoQuestion`
 
 **Files:**
 - Modify: `src/ai-answer-generator.ts` (around line 139)
@@ -257,7 +209,7 @@ git commit -m "Pass willingToRelocate to answerYesNoQuestion prompt"
 
 ---
 
-### Task 5: Add `Willing to Relocate` line to `pickFromOptions`
+### Task 4: Add `Willing to Relocate` line to `pickFromOptions`
 
 **Files:**
 - Modify: `src/ai-answer-generator.ts` (around line 230)
@@ -309,7 +261,7 @@ git commit -m "Pass willingToRelocate to pickFromOptions prompt"
 
 ---
 
-### Task 6: Manual end-to-end verification
+### Task 5: Manual end-to-end verification
 
 **Files:**
 - No code changes.
@@ -354,9 +306,11 @@ If nothing surprised you, skip this step.
 
 ## Done When
 
-- `willingToRelocate?: boolean` exists on the `Preferences` interface in both `config/resume-data.ts` and `config/resume-data.example.ts`.
-- Both files have `willingToRelocate: true` in the example `preferences` literal.
+- `willingToRelocate?: boolean` exists on the `Preferences` interface in `config/resume-data.example.ts` (the tracked file).
+- `config/resume-data.example.ts` has `willingToRelocate: true` in the example `preferences` literal.
+- The user's local `config/resume-data.ts` has been updated to mirror the field (so the runtime can read it), but is NOT committed — `git status` does not list it and `git check-ignore` still shows it is gitignored.
 - All three prompt methods in `src/ai-answer-generator.ts` (`generateAnswer`, `answerYesNoQuestion`, `pickFromOptions`) include a `Willing to Relocate: Yes/No` line.
 - `npx tsc --noEmit` passes.
 - `npm test` passes.
 - A manual run against the previously-failing form shows the relocation question answered "Yes".
+- No `git add -f` was used anywhere in the workflow. Confirm with `git log --all --oneline -- config/resume-data.ts` returning empty.
