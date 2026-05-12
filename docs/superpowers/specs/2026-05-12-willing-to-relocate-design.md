@@ -17,7 +17,7 @@ Other prompts (`generateAnswer`, `pickFromOptions`) have the same gap. A combobo
 
 ### New `Preferences` field
 
-Add to the `Preferences` interface in **both** `config/resume-data.ts` and `config/resume-data.example.ts`:
+Add to the `Preferences` interface in `config/resume-data.example.ts` (the tracked file — `config/resume-data.ts` is in `.gitignore` and must never be committed):
 
 ```typescript
 willingToRelocate?: boolean; // Are you willing to relocate for the right role?
@@ -25,13 +25,15 @@ willingToRelocate?: boolean; // Are you willing to relocate for the right role?
 
 Place the new field after `requiresVisaSponsorship` and before `over18`, matching the existing flag-grouping order in the interface body.
 
-Add to the `preferences` literal in both files:
+Add to the example `preferences` literal:
 
 ```typescript
 willingToRelocate: true, // Open to relocating for the right role
 ```
 
-The field is optional (`?:`) so that older copies of `resume-data.ts` (e.g., another developer's branch) don't break when this change merges. The prompt-string coercion `preferences.willingToRelocate ? 'Yes' : 'No'` treats `undefined` as `'No'`, which is the conservative default.
+The user separately updates their local `config/resume-data.ts` (gitignored, holds personal data) to mirror the interface change, so the runtime can read `preferences.willingToRelocate`. That local change is not committed.
+
+The field is optional (`?:`) so the prompt-string coercion `preferences.willingToRelocate ? 'Yes' : 'No'` safely treats `undefined` as `'No'` for anyone whose local resume-data hasn't been updated.
 
 ### Prompt-string additions
 
