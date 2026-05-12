@@ -14,6 +14,17 @@ export interface ResumeData {
     gender?: 'Male' | 'Female' | 'Decline to self-identify'; // EEOC demographic (optional)
     race?: 'Hispanic or Latino' | 'White (Not Hispanic or Latino)' | 'Black or African American (Not Hispanic or Latino)' | 'Native Hawaiian or Other Pacific Islander (Not Hispanic or Latino)' | 'Asian (Not Hispanic or Latino)' | 'American Indian or Alaska Native (Not Hispanic or Latino)' | 'Two or More Races (Not Hispanic or Latino)' | 'Decline to self-identify'; // EEOC demographic (optional)
     veteranStatus?: 'I identify as one or more of the classifications of protected veteran listed above' | 'I am not a protected veteran' | 'I decline to self-identify for protected veteran status'; // EEOC demographic (optional)
+    hispanicLatino?: 'Yes' | 'No' | 'Decline to self-identify';
+    disabilityStatus?:
+      | 'Yes, I have a disability, or have had one in the past'
+      | 'No, I do not have a disability and have not had one in the past'
+      | 'I do not want to answer';
+    education?: {
+      degree: string;
+      discipline?: string;
+      school?: string;
+    };
+    yearsOfExperienceByTech?: Record<string, number>;
   };
   resumePath: string;
   coverLetterPath?: string;
@@ -51,6 +62,19 @@ export const resumeData: ResumeData = {
     portfolio: 'https://johndoe.com',
     university: 'Georgia Institute of Technology', // Your university
     yearsOfExperience: 5, // Years of relevant experience
+    hispanicLatino: 'No',
+    education: {
+      degree: "Bachelor's Degree",
+      discipline: 'Computer Science',
+      school: 'Georgia Institute of Technology',
+    },
+    yearsOfExperienceByTech: {
+      JavaScript: 5,
+      TypeScript: 5,
+      React: 5,
+      'Node.js': 5,
+      Python: 3,
+    },
   },
   resumePath: './resumes/resume.pdf',
   coverLetterPath: './resumes/cover-letter.pdf', // Optional
