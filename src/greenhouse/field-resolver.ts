@@ -103,8 +103,7 @@ export class FieldResolver {
     if (/years.*experience/.test(label)) {
       const match = label.match(/^years of (.+?) (?:development )?experience$/);
       if (match && match[1]) {
-        const techRaw = match[1].replace(/\bdevelopment\b|\bexperience\b/g, '').trim();
-        const key = normalizeTechKey(techRaw);
+        const key = normalizeTechKey(match[1].trim());
         const byTech = personalInfo.yearsOfExperienceByTech ?? {};
         for (const [k, v] of Object.entries(byTech)) {
           if (normalizeTechKey(k) === key) {
