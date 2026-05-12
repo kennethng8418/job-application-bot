@@ -150,7 +150,34 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
   }
 
   private async submit(): Promise<void> {
-    throw new Error('not implemented yet (Task 13)');
+    if (!this.page) throw new Error('page not ready');
+    const captcha = this.page.locator(SELECTORS.recaptchaIframe);
+    if ((await captcha.count()) > 0) {
+      console.log('  ❌ reCAPTCHA detected — submission aborted, moving on');
+      return;
+    }
+
+    const submitBtn = this.page.locator(SELECTORS.submitButton).first();
+    if ((await submitBtn.count()) === 0) {
+      console.log('  ❌ Submit button not found');
+      return;
+    }
+
+    const beforeUrl = this.page.url();
+    await submitBtn.click();
+
+    try {
+      await this.page.waitForFunction(
+        (prevUrl) =>
+          window.location.href !== prevUrl ||
+          document.body.innerText.match(/application submitted|thank you for applying|your application/i),
+        beforeUrl,
+        { timeout: POST_SUBMIT_VERIFICATION_MS },
+      );
+      console.log('  ✓ Submission confirmed');
+    } catch {
+      console.log('  ⚠️  Submission status uncertain — manual review required');
+    }
   }
 
   protected async enumerateFields(): Promise<Field[]> {
