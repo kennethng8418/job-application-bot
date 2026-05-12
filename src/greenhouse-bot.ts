@@ -53,7 +53,38 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
   }
 
   async fillPersonalInfo(): Promise<void> {
-    throw new Error('not implemented yet (Task 11)');
+    if (!this.page) throw new Error('page not ready');
+    let fields = await this.enumerateFields();
+
+    const phoneFields = fields.filter(f => /^phone$/i.test(f.label));
+    const isPhoneFor = (label: string, idx: number): 'first' | 'second' | 'only' | false => {
+      if (!/^phone$/i.test(label)) return false;
+      if (phoneFields.length === 1) return 'only';
+      return idx === 0 ? 'first' : 'second';
+    };
+
+    const countryField = fields.find(f => /^country$/i.test(f.label));
+    const universalLabels = /^(first name|last name|email)$/i;
+
+    for (const field of fields) {
+      if (!universalLabels.test(field.label)) continue;
+      const result = this.resolver.resolve(field.label, { isPhone: false });
+      if (result.kind === 'value') await this.fillField(field, result.value);
+    }
+
+    if (countryField) {
+      const result = this.resolver.resolve('Country', { isPhone: false });
+      if (result.kind === 'value') await this.fillField(countryField, result.value);
+      await this.page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+      fields = await this.enumerateFields();
+    }
+
+    const refreshedPhones = fields.filter(f => /^phone$/i.test(f.label));
+    for (let i = 0; i < refreshedPhones.length; i++) {
+      const ctx = isPhoneFor('Phone', i);
+      const result = this.resolver.resolve('Phone', { isPhone: ctx });
+      if (result.kind === 'value') await this.fillField(refreshedPhones[i], result.value);
+    }
   }
 
   async uploadResume(): Promise<void> {
@@ -61,7 +92,27 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
   }
 
   async handleAdditionalQuestions(): Promise<void> {
-    throw new Error('not implemented yet (Task 11)');
+    if (!this.page) throw new Error('page not ready');
+    const fields = await this.enumerateFields();
+    const universalLabels = /^(first name|last name|email|phone|country|resume\/cv|resume)$/i;
+
+    for (const field of fields) {
+      if (universalLabels.test(field.label)) continue;
+      if (field.kind === 'file') continue;
+
+      const isTextarea = field.kind === 'textarea';
+      const result = await this.resolver.resolveAsync(
+        field.label,
+        { isPhone: false },
+        { isTextarea },
+      );
+
+      if (result.kind === 'value') {
+        await this.fillField(field, result.value);
+      } else if (result.kind === 'unresolved' && field.required) {
+        console.log(`  ⚠️  Unresolved required field: ${field.label}`);
+      }
+    }
   }
 
   private async submit(): Promise<void> {
@@ -69,6 +120,109 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
   }
 
   protected async enumerateFields(): Promise<Field[]> {
-    throw new Error('not implemented yet (Task 11)');
+    if (!this.page) throw new Error('page not ready');
+    const fields: Field[] = [];
+
+    const labelHandles = await this.page.locator('label').all();
+    for (const labelHandle of labelHandles) {
+      const labelText = (await labelHandle.textContent())?.trim() ?? '';
+      if (!labelText) continue;
+
+      const forAttr = await labelHandle.getAttribute('for');
+      if (!forAttr) continue;
+
+      const escapedForAttr = forAttr.replace(/(["\\#.\[\]:])/g, '\\$1');
+      const input = this.page.locator(`#${escapedForAttr}`).first();
+      if ((await input.count()) === 0) continue;
+
+      const tagName = (await input.evaluate(el => el.tagName)).toLowerCase();
+      const typeAttr = (await input.getAttribute('type')) ?? '';
+      const ariaRequired = (await input.getAttribute('aria-required')) === 'true';
+      const required = ariaRequired || (await input.getAttribute('required')) !== null
+        || /\*\s*$/.test(labelText);
+      const role = await input.getAttribute('role');
+
+      let kind: Field['kind'];
+      if (tagName === 'textarea') kind = 'textarea';
+      else if (tagName === 'select') kind = 'select';
+      else if (typeAttr === 'file') kind = 'file';
+      else if (typeAttr === 'checkbox') kind = 'checkbox';
+      else if (typeAttr === 'radio') kind = 'radio';
+      else if (role === 'combobox') kind = 'combobox';
+      else kind = 'text';
+
+      const labelClean = labelText.replace(/\*$/, '').trim();
+
+      if (kind === 'select') {
+        const options = await input.locator('option').allTextContents();
+        fields.push({ kind, label: labelClean, element: input, required, options: options.map(o => o.trim()) });
+      } else if (kind === 'radio') {
+        const groupName = (await input.getAttribute('name')) ?? '';
+        const groupInputs = this.page.locator(`input[name="${groupName}"]`);
+        const optionLabels: string[] = [];
+        const count = await groupInputs.count();
+        for (let i = 0; i < count; i++) {
+          const id = await groupInputs.nth(i).getAttribute('id');
+          if (id) {
+            const optLabel = this.page.locator(`label[for="${id}"]`).first();
+            if ((await optLabel.count()) > 0) {
+              optionLabels.push(((await optLabel.textContent()) ?? '').trim());
+            }
+          }
+        }
+        fields.push({ kind, label: labelClean, element: input, required, options: optionLabels });
+      } else {
+        fields.push({ kind, label: labelClean, element: input, required } as Field);
+      }
+    }
+
+    return fields;
+  }
+
+  private async fillField(field: Field, value: string): Promise<void> {
+    switch (field.kind) {
+      case 'text':
+      case 'textarea':
+        await field.element.fill(value);
+        break;
+      case 'select':
+        await field.element.selectOption({ label: value }).catch(async () => {
+          await field.element.selectOption({ value }).catch(() => {});
+        });
+        break;
+      case 'combobox':
+        await field.element.click();
+        if (this.page) {
+          const option = this.page.locator('[role="option"]').filter({ hasText: value }).first();
+          if ((await option.count()) > 0) await option.click();
+        }
+        break;
+      case 'radio':
+        if (this.page) {
+          const groupName = await field.element.getAttribute('name');
+          if (groupName) {
+            const groupInputs = this.page.locator(`input[name="${groupName}"]`);
+            const count = await groupInputs.count();
+            for (let i = 0; i < count; i++) {
+              const radio = groupInputs.nth(i);
+              const id = await radio.getAttribute('id');
+              if (!id) continue;
+              const labelEl = this.page.locator(`label[for="${id}"]`).first();
+              const labelText = ((await labelEl.textContent()) ?? '').trim();
+              if (labelText.toLowerCase() === value.toLowerCase()) {
+                await radio.check();
+                break;
+              }
+            }
+          }
+        }
+        break;
+      case 'checkbox':
+        if (value === 'true' || value === 'Yes') await field.element.check();
+        else await field.element.uncheck();
+        break;
+      case 'file':
+        throw new Error('fillField should not be called for files — use uploadResume()');
+    }
   }
 }
