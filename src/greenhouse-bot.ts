@@ -85,7 +85,42 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
   }
 
   async uploadResume(): Promise<void> {
-    throw new Error('not implemented yet (Task 12)');
+    if (!this.page) throw new Error('page not ready');
+    const resumeAbsPath = path.resolve(this.resumeData.resumePath);
+    if (!fs.existsSync(resumeAbsPath)) {
+      console.log(`  ❌ Resume file not found: ${resumeAbsPath}`);
+      return;
+    }
+    const size = fs.statSync(resumeAbsPath).size;
+    if (size > MAX_RESUME_BYTES) {
+      console.log(`  ❌ Resume exceeds 10MB cap (${size} bytes)`);
+      return;
+    }
+
+    const resumeInput = this.page.locator(SELECTORS.resumeFileInput).first();
+    if ((await resumeInput.count()) === 0) {
+      console.log('  ⚠️  No resume file input found');
+      return;
+    }
+    await resumeInput.setInputFiles(resumeAbsPath);
+    console.log(`  ✓ Uploaded resume: ${path.basename(resumeAbsPath)}`);
+
+    await this.page
+      .locator(SELECTORS.uploadConfirmation)
+      .first()
+      .waitFor({ timeout: UPLOAD_CONFIRMATION_TIMEOUT_MS })
+      .catch(() => console.log('  ⚠️  Upload confirmation not detected (continuing)'));
+
+    if (this.resumeData.coverLetterPath) {
+      const clAbsPath = path.resolve(this.resumeData.coverLetterPath);
+      if (fs.existsSync(clAbsPath)) {
+        const clInput = this.page.locator(SELECTORS.coverLetterFileInput).first();
+        if ((await clInput.count()) > 0) {
+          await clInput.setInputFiles(clAbsPath);
+          console.log(`  ✓ Uploaded cover letter: ${path.basename(clAbsPath)}`);
+        }
+      }
+    }
   }
 
   async handleAdditionalQuestions(): Promise<void> {
