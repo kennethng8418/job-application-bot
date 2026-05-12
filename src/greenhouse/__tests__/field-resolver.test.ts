@@ -333,3 +333,85 @@ test('EEO: Gender Identity (extra voluntary) → Prefer not to answer', () => {
   const result = r.resolve('Gender Identity', { isPhone: false });
   assert.deepEqual(result, { kind: 'value', value: 'Prefer not to answer' });
 });
+
+test('AI fallback: called for unresolved textarea', async () => {
+  let captured: string | null = null;
+  const mockGen = {
+    isEnabled: () => true,
+    generateAnswer: async (q: string) => {
+      captured = q;
+      return 'A thoughtful answer.';
+    },
+  };
+  const r = new FieldResolver(baseResumeData, mockGen as any);
+  const result = await r.resolveAsync(
+    'Why are you interested in our company?',
+    { isPhone: false },
+    { isTextarea: true },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'A thoughtful answer.' });
+  assert.equal(captured, 'Why are you interested in our company?');
+});
+
+test('AI fallback: not called for short text inputs', async () => {
+  let called = false;
+  const mockGen = {
+    isEnabled: () => true,
+    generateAnswer: async () => {
+      called = true;
+      return 'should not be returned';
+    },
+  };
+  const r = new FieldResolver(baseResumeData, mockGen as any);
+  const result = await r.resolveAsync('Favorite Color', { isPhone: false }, { isTextarea: false });
+  assert.equal(called, false);
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('AI fallback: not called when generator disabled', async () => {
+  let called = false;
+  const mockGen = {
+    isEnabled: () => false,
+    generateAnswer: async () => {
+      called = true;
+      return null;
+    },
+  };
+  const r = new FieldResolver(baseResumeData, mockGen as any);
+  const result = await r.resolveAsync(
+    'Why are you interested?',
+    { isPhone: false },
+    { isTextarea: true },
+  );
+  assert.equal(called, false);
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('AI fallback: null response → unresolved', async () => {
+  const mockGen = {
+    isEnabled: () => true,
+    generateAnswer: async () => null,
+  };
+  const r = new FieldResolver(baseResumeData, mockGen as any);
+  const result = await r.resolveAsync(
+    'Why are you interested?',
+    { isPhone: false },
+    { isTextarea: true },
+  );
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('AI fallback: not called when earlier resolver returns a value', async () => {
+  let called = false;
+  const mockGen = {
+    isEnabled: () => true,
+    generateAnswer: async () => {
+      called = true;
+      return 'should not be returned';
+    },
+  };
+  const r = new FieldResolver(baseResumeData, mockGen as any);
+  const result = await r.resolveAsync('First Name', { isPhone: false }, { isTextarea: false });
+  assert.equal(called, false);
+  assert.deepEqual(result, { kind: 'value', value: 'Test' });
+});

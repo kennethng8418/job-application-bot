@@ -1,5 +1,6 @@
 import type { ResumeData } from '../../config/resume-data';
 import type { ResolverContext, ResolverResult } from './types';
+import type { AIAnswerGenerator } from '../ai-answer-generator';
 import { PREFERENCES } from '../../config/answer-preferences';
 import { EEO_DEFAULTS } from './eeo-options';
 
@@ -35,7 +36,10 @@ function inferCountry(location: string): string {
 }
 
 export class FieldResolver {
-  constructor(private readonly resumeData: ResumeData) {}
+  constructor(
+    private readonly resumeData: ResumeData,
+    private readonly aiGenerator?: AIAnswerGenerator,
+  ) {}
 
   resolve(rawLabel: string, ctx: ResolverContext): ResolverResult {
     const label = normalizeLabel(rawLabel);
@@ -46,6 +50,24 @@ export class FieldResolver {
     const patternResult = this.tryPattern(label);
     if (patternResult.kind !== 'unresolved') return patternResult;
     return { kind: 'unresolved' };
+  }
+
+  async resolveAsync(
+    rawLabel: string,
+    ctx: ResolverContext,
+    opts: { isTextarea: boolean },
+  ): Promise<ResolverResult> {
+    const syncResult = this.resolve(rawLabel, ctx);
+    if (syncResult.kind !== 'unresolved') return syncResult;
+
+    if (!opts.isTextarea) return { kind: 'unresolved' };
+    if (!this.aiGenerator || !this.aiGenerator.isEnabled()) {
+      return { kind: 'unresolved' };
+    }
+
+    const answer = await this.aiGenerator.generateAnswer(rawLabel);
+    if (!answer) return { kind: 'unresolved' };
+    return { kind: 'value', value: answer };
   }
 
   private tryEEO(label: string): ResolverResult {
