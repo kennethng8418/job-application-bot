@@ -57,7 +57,7 @@ ${background}
 
 Name: ${personalInfo.firstName} ${personalInfo.lastName}
 Location: ${personalInfo.location}
-University: ${personalInfo.university || 'Not specified'}
+University: ${personalInfo.education?.school || 'Not specified'}
 Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
 US Citizen: ${preferences.usCitizen ? 'Yes' : 'No'}
 Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
@@ -71,7 +71,7 @@ IMPORTANT INSTRUCTIONS:
 3. If the question asks about visa status, visa type, visa expiration, or sponsorship details AND the applicant does NOT require visa sponsorship, answer with "N/A" or "None" (whichever is more appropriate for the question context).
 4. If the question asks "How did you hear about this opportunity?" or "Where did you find this job?", answer with "LinkedIn" (single word).
 5. If the question asks about location, city, where you are available to work, or what cities you can work in, answer ONLY with the applicant's location: "${personalInfo.location}" (do NOT add any explanation or additional text).
-6. If the question asks about university, college, or school, answer ONLY with: "${personalInfo.university || 'Not specified'}" (do NOT add any explanation).
+6. If the question asks about university, college, or school, answer ONLY with: "${personalInfo.education?.school || 'Not specified'}" (do NOT add any explanation).
 7. If the question asks about years of experience (e.g., "How many years of relevant experience do you have?"), answer ONLY with the number: "${personalInfo.yearsOfExperience || 'Not specified'}" (just the number, no additional text).
 8. If the question asks for explanation, reasoning, or a story (e.g., "How'd you get into programming?", "Why are you interested?"), provide a genuine, professional answer in 2-4 sentences based on their actual resume.
 9. Keep your answer natural and conversational.
