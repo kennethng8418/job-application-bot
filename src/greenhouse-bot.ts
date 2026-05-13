@@ -261,8 +261,11 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       const forAttr = await labelHandle.getAttribute('for');
       if (!forAttr) continue;
 
-      const escapedForAttr = forAttr.replace(/(["\\#.\[\]:])/g, '\\$1');
-      const input = this.page.locator(`#${escapedForAttr}`).first();
+      // Use attribute selector instead of `#id` — IDs beginning with a digit
+      // (e.g. Greenhouse's numeric question IDs like "376") aren't valid in
+      // `#id` syntax. Attribute selectors only need `"` and `\` escaped.
+      const escapedForAttr = forAttr.replace(/(["\\])/g, '\\$1');
+      const input = this.page.locator(`[id="${escapedForAttr}"]`).first();
       if ((await input.count()) === 0) continue;
 
       const tagName = (await input.evaluate(el => el.tagName)).toLowerCase();
