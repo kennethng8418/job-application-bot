@@ -329,6 +329,22 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       case 'combobox':
         await field.element.click();
         if (this.page) {
+          // Location (City) is a type-ahead combobox — options don't render
+          // until the user types. Type the first two words of the configured
+          // location (e.g. "New York" from "New York City, NY"), wait for a
+          // suggestion, then press Enter to accept the highlighted item.
+          if (/location \(city\)/i.test(field.label)) {
+            const prefix = value.split(/\s+/).slice(0, 2).join(' ');
+            await field.element.fill(prefix);
+            await this.page
+              .locator('[role="option"]')
+              .first()
+              .waitFor({ state: 'visible', timeout: 3000 })
+              .catch(() => null);
+            await field.element.press('Enter');
+            break;
+          }
+
           await this.page
             .locator('[role="option"]')
             .first()
@@ -342,10 +358,30 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
             optionTexts.push(((await allOptions.nth(i).textContent()) ?? '').trim());
           }
 
-          const matched = matchEEOOption(optionTexts, value);
+          let matched = matchEEOOption(optionTexts, value);
+
+          // AI fallback for required comboboxes when static matching fails.
+          // Greenhouse multi-choice fields like "Are you currently authorized
+          // to work in this country?" have option text that doesn't reduce to
+          // "Yes"/"No" — let Claude pick the option that best fits the
+          // applicant's resume + preferences.
+          if (!matched && field.required && optCount > 0 && this.aiGenerator.isEnabled()) {
+            console.log(
+              `  🤖 Combobox "${field.label}" — static match failed, asking AI from ${optCount} options...`,
+            );
+            const aiPick = await this.aiGenerator.pickFromOptions(field.label, optionTexts);
+            if (aiPick) matched = aiPick;
+          }
+
           if (matched) {
             const idx = optionTexts.indexOf(matched);
             await allOptions.nth(idx).click();
+            console.log(`  ✓ Combobox "${field.label}" → "${matched}"`);
+          } else {
+            console.log(
+              `  ⚠️  Combobox "${field.label}" — no match for desired="${value}". ` +
+              `Options seen (${optCount}): ${JSON.stringify(optionTexts)}`,
+            );
           }
         }
         break;
