@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ResumeData } from '../config/resume-data';
 import { PREFERENCES } from '../config/answer-preferences';
 import { classifyQuestion } from './utils/question-classifier';
+import { buildPickPrompt } from './utils/ai-prompt';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -216,30 +217,15 @@ IMPORTANT: Answer ONLY with "Yes" or "No" - nothing else. Consider the applicant
 
     const askModel = async (strict: boolean): Promise<string | null> => {
       try {
-        const optionList = options.map((o, i) => `${i + 1}. ${o}`).join('\n');
-
-        const instruction = strict
-          ? 'CRITICAL: Respond with the EXACT text of one option, copy-paste from the list above. No extra words, no quotes, no numbering.'
-          : 'Respond with the exact text of the option you choose. Do not add quotes, numbering, or explanation.';
-
-        const prompt = `You are helping fill out a job application. Pick exactly ONE option from the list below.
-
-Applicant background:
-${background}
-
-Name: ${personalInfo.firstName} ${personalInfo.lastName}
-Years of Experience: ${personalInfo.yearsOfExperience || 'Not specified'}
-Requires Visa Sponsorship: ${preferences.requiresVisaSponsorship ? 'Yes' : 'No'}
-Willing to Relocate: ${preferences.willingToRelocate ? 'Yes' : 'No'}
-
-Tone preference: ${tone} (pick the strongest plausible option that the resume supports; do not overclaim).
-
-Question: ${question}
-
-Options:
-${optionList}
-
-${instruction}`;
+        const prompt = buildPickPrompt({
+          personalInfo,
+          preferences,
+          background,
+          tone,
+          question,
+          options,
+          strict,
+        });
 
         const messageContent: Array<any> = [];
         if (this.resumeBase64) {

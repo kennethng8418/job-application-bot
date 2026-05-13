@@ -112,3 +112,77 @@ test('Yes matches "Yes, I have done this" option (prefix)', () => {
   const result = matchEEOOption(options, 'Yes');
   assert.equal(result, 'Yes, I have done this');
 });
+
+// Race-aware matching: bridge coarse EEOC race strings to finer-grained options.
+
+test('race: "Asian (Not Hispanic or Latino)" with no sub-category → first Asian sub-category alphabetically', () => {
+  const options = [
+    'Black or of African descent',
+    'East Asian',
+    'Hispanic, Latine or of Spanish Origin',
+    'Indigenous, American Indian or Alaska Native',
+    'Middle Eastern or North African Native',
+    'Hawaiian or Pacific Islander',
+    'South Asian',
+    'Southeast Asian',
+    'White or European',
+    "I don't wish to answer",
+  ];
+  const result = matchEEOOption(options, 'Asian (Not Hispanic or Latino)');
+  assert.equal(result, 'East Asian');
+});
+
+test('race: "Asian (Not Hispanic or Latino)" with asianSubcategory=South Asian → "South Asian"', () => {
+  const options = [
+    'East Asian',
+    'South Asian',
+    'Southeast Asian',
+  ];
+  const result = matchEEOOption(options, 'Asian (Not Hispanic or Latino)', {
+    asianSubcategory: 'South Asian',
+  });
+  assert.equal(result, 'South Asian');
+});
+
+test('race: "Asian (Not Hispanic or Latino)" with asianSubcategory=Southeast Asian → "Southeast Asian"', () => {
+  const options = ['East Asian', 'South Asian', 'Southeast Asian'];
+  const result = matchEEOOption(options, 'Asian (Not Hispanic or Latino)', {
+    asianSubcategory: 'Southeast Asian',
+  });
+  assert.equal(result, 'Southeast Asian');
+});
+
+test('race: "Black or African American (Not Hispanic or Latino)" → "Black or of African descent"', () => {
+  const options = ['Black or of African descent', 'East Asian', 'White or European'];
+  const result = matchEEOOption(
+    options,
+    'Black or African American (Not Hispanic or Latino)',
+  );
+  assert.equal(result, 'Black or of African descent');
+});
+
+test('race: existing substring matching still works for "Hispanic or Latino" → "Hispanic, Latine..."', () => {
+  const options = ['Hispanic, Latine or of Spanish Origin', 'White or European'];
+  const result = matchEEOOption(options, 'Hispanic or Latino');
+  assert.equal(result, 'Hispanic, Latine or of Spanish Origin');
+});
+
+test('race: standard EEOC "Asian (Not Hispanic or Latino)" still matches exact option when present', () => {
+  // Coarse EEOC forms list the exact string verbatim; race-aware tier must
+  // not shadow exact matches.
+  const options = [
+    'Asian (Not Hispanic or Latino)',
+    'White (Not Hispanic or Latino)',
+    'Decline to self-identify',
+  ];
+  const result = matchEEOOption(options, 'Asian (Not Hispanic or Latino)');
+  assert.equal(result, 'Asian (Not Hispanic or Latino)');
+});
+
+test('race: "Asian" token doesn\'t false-positive on Caucasian or country options', () => {
+  // Defensive: an option list with no Asian sub-category should miss, not
+  // bleed into Caucasian or unrelated tokens.
+  const options = ['Caucasian', 'European', 'African American', "I don't wish to answer"];
+  const result = matchEEOOption(options, 'Asian (Not Hispanic or Latino)');
+  assert.equal(result, null);
+});

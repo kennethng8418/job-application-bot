@@ -7,6 +7,7 @@ import { AIAnswerGenerator } from './ai-answer-generator';
 import { FieldResolver } from './greenhouse/field-resolver';
 import type { Field } from './greenhouse/types';
 import { matchEEOOption } from './greenhouse/eeo-options';
+import { isEmptyField } from './greenhouse/field-emptiness';
 import {
   SELECTORS,
   MAX_RESUME_BYTES,
@@ -46,11 +47,26 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
     await this.fillPersonalInfo();
     await this.uploadResume();
     await this.handleAdditionalQuestions();
+    const unresolved = await this.fillMissingRequiredFields();
 
     if (this.dryRun) {
       console.log('🧪 Dry run — skipping submit');
       return;
     }
+
+    if (unresolved.length > 0) {
+      const labelList = unresolved.map(l => `"${l}"`).join(', ');
+      console.log(
+        `  ⛔ ${unresolved.length} required field(s) still unresolved — skipping submit: ${labelList}`,
+      );
+      await this.recordSubmission(
+        'error',
+        `Submit aborted — ${unresolved.length} required field(s) unresolved: ${labelList}`,
+        null,
+      );
+      return;
+    }
+
     await this.submit();
   }
 
@@ -149,6 +165,143 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
         console.log(`  ⚠️  Unresolved required field: ${field.label}`);
       }
     }
+  }
+
+  /**
+   * Safety-net pass: re-enumerate fields, identify required ones that are
+   * still empty after the resolver pass, and ask Claude to answer them based
+   * on the question + visible options. Returns the labels of fields that
+   * remain unresolved after this pass — caller decides whether to submit.
+   */
+  async fillMissingRequiredFields(): Promise<string[]> {
+    if (!this.page) throw new Error('page not ready');
+    if (!this.aiGenerator.isEnabled()) {
+      console.log('  ℹ️  AI disabled — skipping missing-required sweep');
+      return [];
+    }
+
+    const fields = await this.enumerateFields();
+    const requiredEmpty: typeof fields = [];
+    for (const field of fields) {
+      if (!field.required) continue;
+      if (field.kind === 'file') continue;
+      if (await isEmptyField(field, { page: this.page })) {
+        requiredEmpty.push(field);
+      }
+    }
+
+    if (requiredEmpty.length === 0) {
+      console.log('  ✓ All required fields filled');
+      return [];
+    }
+
+    console.log(
+      `  🩹 Sweep: ${requiredEmpty.length} required field(s) still empty — asking AI`,
+    );
+
+    const MAX_AI_CALLS = 15;
+    const stillUnresolved: string[] = [];
+    const toProcess = requiredEmpty.slice(0, MAX_AI_CALLS);
+    if (requiredEmpty.length > MAX_AI_CALLS) {
+      console.log(
+        `  ⚠️  Capping AI calls at ${MAX_AI_CALLS}; ${requiredEmpty.length - MAX_AI_CALLS} additional field(s) will be reported unresolved.`,
+      );
+      for (const f of requiredEmpty.slice(MAX_AI_CALLS)) {
+        stillUnresolved.push(f.label);
+      }
+    }
+
+    for (const field of toProcess) {
+      const filled = await this.fillRequiredFieldViaAI(field);
+      if (!filled) {
+        stillUnresolved.push(field.label);
+        console.log(`  ❌ Sweep could not fill: "${field.label}"`);
+      } else {
+        console.log(`  🩹 Patched required "${field.label}"`);
+      }
+    }
+
+    return stillUnresolved;
+  }
+
+  private async fillRequiredFieldViaAI(field: Field): Promise<boolean> {
+    if (!this.page) return false;
+
+    if (field.kind === 'text' || field.kind === 'textarea') {
+      const answer = await this.aiGenerator.generateAnswer(field.label);
+      if (!answer) return false;
+      await field.element.fill(answer.trim());
+      return true;
+    }
+
+    if (field.kind === 'checkbox') {
+      const yn = await this.aiGenerator.answerYesNoQuestion(field.label);
+      if (yn === 'Yes') {
+        await field.element.check();
+        return true;
+      }
+      if (yn === 'No') {
+        await field.element.uncheck();
+        return true;
+      }
+      return false;
+    }
+
+    if (field.kind === 'select' && field.options.length > 0) {
+      const real = field.options.filter(o => !/^select\.{2,}|^choose|^please select|^--/i.test(o.trim()) && o.trim() !== '');
+      const choice = await this.aiGenerator.pickFromOptions(field.label, real);
+      if (!choice) return false;
+      await field.element.selectOption({ label: choice }).catch(async () => {
+        await field.element.selectOption({ value: choice }).catch(() => {});
+      });
+      return true;
+    }
+
+    if (field.kind === 'radio' && field.options.length > 0) {
+      const choice = await this.aiGenerator.pickFromOptions(field.label, field.options);
+      if (!choice) return false;
+      const groupName = await field.element.getAttribute('name');
+      if (!groupName) return false;
+      const escapedName = groupName.replace(/(["\\])/g, '\\$1');
+      const group = this.page.locator(`input[name="${escapedName}"]`);
+      const count = await group.count();
+      for (let i = 0; i < count; i++) {
+        const id = await group.nth(i).getAttribute('id');
+        if (!id) continue;
+        const labelEl = this.page.locator(`label[for="${id}"]`).first();
+        const labelText = ((await labelEl.textContent()) ?? '').trim();
+        if (labelText.toLowerCase() === choice.toLowerCase()) {
+          await group.nth(i).check();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (field.kind === 'combobox') {
+      // Open the dropdown, harvest visible options, ask AI to pick one.
+      await field.element.click();
+      await this.page
+        .locator('.select__menu [role="option"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .catch(() => null);
+      const allOptions = this.page.locator('.select__menu [role="option"]');
+      const optCount = await allOptions.count();
+      if (optCount === 0) return false;
+      const optionTexts: string[] = [];
+      for (let i = 0; i < optCount; i++) {
+        optionTexts.push(((await allOptions.nth(i).textContent()) ?? '').trim());
+      }
+      const choice = await this.aiGenerator.pickFromOptions(field.label, optionTexts);
+      if (!choice) return false;
+      const idx = optionTexts.indexOf(choice);
+      if (idx < 0) return false;
+      await allOptions.nth(idx).click();
+      return true;
+    }
+
+    return false;
   }
 
   private async submit(): Promise<void> {
@@ -319,7 +472,9 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
         await field.element.fill(value);
         break;
       case 'select': {
-        const matched = matchEEOOption(field.options, value);
+        const matched = matchEEOOption(field.options, value, {
+          asianSubcategory: this.resumeData.personalInfo.asianSubcategory,
+        });
         const labelToUse = matched ?? value;
         await field.element.selectOption({ label: labelToUse }).catch(async () => {
           await field.element.selectOption({ value: labelToUse }).catch(() => {});
@@ -337,7 +492,7 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
             const prefix = value.split(/\s+/).slice(0, 2).join(' ');
             await field.element.fill(prefix);
             await this.page
-              .locator('[role="option"]')
+              .locator('.select__menu [role="option"]')
               .first()
               .waitFor({ state: 'visible', timeout: 3000 })
               .catch(() => null);
@@ -346,19 +501,21 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
           }
 
           await this.page
-            .locator('[role="option"]')
+            .locator('.select__menu [role="option"]')
             .first()
             .waitFor({ state: 'visible', timeout: 3000 })
             .catch(() => null);
 
-          const allOptions = this.page.locator('[role="option"]');
+          const allOptions = this.page.locator('.select__menu [role="option"]');
           const optCount = await allOptions.count();
           const optionTexts: string[] = [];
           for (let i = 0; i < optCount; i++) {
             optionTexts.push(((await allOptions.nth(i).textContent()) ?? '').trim());
           }
 
-          let matched = matchEEOOption(optionTexts, value);
+          let matched = matchEEOOption(optionTexts, value, {
+            asianSubcategory: this.resumeData.personalInfo.asianSubcategory,
+          });
 
           // AI fallback for required comboboxes when static matching fails.
           // Greenhouse multi-choice fields like "Are you currently authorized
@@ -389,7 +546,9 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
         if (this.page) {
           const groupName = await field.element.getAttribute('name');
           if (groupName) {
-            const matched = matchEEOOption(field.options, value);
+            const matched = matchEEOOption(field.options, value, {
+              asianSubcategory: this.resumeData.personalInfo.asianSubcategory,
+            });
             const labelToMatch = (matched ?? value).toLowerCase();
 
             const groupInputs = this.page.locator(`input[name="${groupName}"]`);
