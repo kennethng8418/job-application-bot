@@ -168,7 +168,7 @@ export class FieldResolver {
     if (/restrictive covenant|agreement.*former employer|non-compete/.test(label)) {
       return { kind: 'value', value: 'No' };
     }
-    if (/privacy policy|terms.*conditions|acknowledge/.test(label)) {
+    if (/privacy policy|terms.*conditions|acknowledge|i consent|by checking this box/.test(label)) {
       return { kind: 'value', value: 'Yes' };
     }
     if (/affirm.*statements.*accurate|certify.*information|all statements and information/.test(label)) {

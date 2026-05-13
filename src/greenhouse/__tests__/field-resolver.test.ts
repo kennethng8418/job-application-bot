@@ -214,6 +214,23 @@ test('Pattern: privacy policy → Yes', () => {
   assert.deepEqual(result, { kind: 'value', value: 'Yes' });
 });
 
+test('Pattern: GDPR demographic consent checkbox → Yes', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'By checking this box, I consent to Mixpanel collecting, storing, and processing my responses to the demographic data surveys above.',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: generic "I consent to..." → Yes', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('I consent to the processing of my data', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
 test('Pattern: affirmation checkbox → true', () => {
   const r = new FieldResolver(baseResumeData);
   const result = r.resolve(
