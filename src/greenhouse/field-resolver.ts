@@ -129,6 +129,34 @@ export class FieldResolver {
     if (/legally authorized|authorized to work|work authorization|currently eligible to work|eligible to work legally/.test(label)) {
       return { kind: 'value', value: preferences.legallyAuthorizedToWork ? 'Yes' : 'No' };
     }
+    // "Are you ... located in <country>?" is a yes/no question — answer based
+    // on whether the applicant's inferred country matches the target country
+    // in the label. Must come BEFORE the generic location-string pattern,
+    // which would otherwise return the city as the answer.
+    const locatedInCountry = label.match(
+      /are you (currently )?(located|based) in (?:the )?(u\.?s\.?a?\.?|united states|united kingdom|u\.?k\.?|canada|germany|france|japan|australia)\b/,
+    );
+    if (locatedInCountry) {
+      const target = locatedInCountry[3].replace(/\./g, '');
+      const COUNTRY_ALIASES: Record<string, string> = {
+        'us': 'United States',
+        'usa': 'United States',
+        'united states': 'United States',
+        'uk': 'United Kingdom',
+        'united kingdom': 'United Kingdom',
+        'canada': 'Canada',
+        'germany': 'Germany',
+        'france': 'France',
+        'japan': 'Japan',
+        'australia': 'Australia',
+      };
+      const canonicalTarget = COUNTRY_ALIASES[target];
+      const applicantCountry = inferCountry(personalInfo.location);
+      return {
+        kind: 'value',
+        value: canonicalTarget === applicantCountry ? 'Yes' : 'No',
+      };
+    }
     if (/(currently )?located in|current location|where are you (currently )?(located|based)/.test(label)) {
       return { kind: 'value', value: personalInfo.location };
     }

@@ -231,6 +231,42 @@ test('Pattern: generic "I consent to..." → Yes', () => {
   assert.deepEqual(result, { kind: 'value', value: 'Yes' });
 });
 
+test('Pattern: "Are you currently located in the US?" with NY location → Yes', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Are you currently located in the US?', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: "Are you located in the United States?" with NY location → Yes', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Are you located in the United States?', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: "Are you currently located in the UK?" with NY location → No', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Are you currently located in the UK?', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: "Where are you located?" still returns location string', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Where are you currently located?', {
+    isPhone: false,
+  });
+  // Should NOT regress to Yes/No — this is asking for the city, not a y/n.
+  assert.equal(result.kind, 'value');
+  if (result.kind === 'value') {
+    assert.equal(result.value, baseResumeData.personalInfo.location);
+  }
+});
+
 test('Pattern: affirmation checkbox → true', () => {
   const r = new FieldResolver(baseResumeData);
   const result = r.resolve(
