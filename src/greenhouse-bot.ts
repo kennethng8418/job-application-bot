@@ -13,6 +13,7 @@ import {
   UPLOAD_CONFIRMATION_TIMEOUT_MS,
   POST_SUBMIT_VERIFICATION_MS,
 } from './greenhouse/selectors';
+import { logSubmission } from './utils/submission-logger';
 
 export interface GreenhouseBotOptions {
   dryRun?: boolean;
@@ -152,20 +153,23 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
 
   private async submit(): Promise<void> {
     if (!this.page) throw new Error('page not ready');
-    const captcha = this.page.locator(SELECTORS.recaptchaIframe);
-    if ((await captcha.count()) > 0) {
-      console.log('  ❌ reCAPTCHA detected — submission aborted, moving on');
-      return;
-    }
 
     const submitBtn = this.page.locator(SELECTORS.submitButton).first();
     if ((await submitBtn.count()) === 0) {
       console.log('  ❌ Submit button not found');
+      await this.recordSubmission('error', 'Submit button not found', null);
       return;
     }
 
+    const startMs = Date.now();
     const beforeUrl = this.page.url();
+    const company = this.companyFromUrl(beforeUrl);
+
     await submitBtn.click();
+
+    let status: 'success' | 'unknown' = 'unknown';
+    let message = 'Submission status uncertain — manual review required';
+    let errorDetails: string | null = null;
 
     try {
       await this.page.waitForFunction(
@@ -175,10 +179,74 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
         beforeUrl,
         { timeout: POST_SUBMIT_VERIFICATION_MS },
       );
+      status = 'success';
+      message = 'Submission confirmed';
       console.log('  ✓ Submission confirmed');
-    } catch {
+    } catch (error) {
+      errorDetails = error instanceof Error ? error.message : String(error);
       console.log('  ⚠️  Submission status uncertain — manual review required');
     }
+
+    const screenshotPath = await this.captureScreenshot(company);
+    const durationMs = Date.now() - startMs;
+
+    await logSubmission({
+      timestamp: new Date().toISOString(),
+      company,
+      status,
+      message,
+      jobUrl: beforeUrl,
+      screenshotPath,
+      durationMs,
+      errorDetails,
+    });
+  }
+
+  private companyFromUrl(url: string): string {
+    // Greenhouse URLs look like:
+    //   https://job-boards.greenhouse.io/<company>/jobs/<id>
+    //   https://job-boards.eu.greenhouse.io/<company>/jobs/<id>
+    //   https://job-boards.greenhouse.io/embed/job_app?for=<company>&...
+    const embedMatch = url.match(/[?&]for=([^&]+)/);
+    if (embedMatch) return embedMatch[1];
+    const pathMatch = url.match(/greenhouse\.io\/([^/]+)\/jobs\//);
+    if (pathMatch) return pathMatch[1];
+    return 'unknown';
+  }
+
+  private async captureScreenshot(company: string): Promise<string | null> {
+    if (!this.page) return null;
+    try {
+      const screenshotDir = path.resolve(process.cwd(), 'screenshots');
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const filePath = path.join(screenshotDir, `greenhouse-${company}-${ts}.png`);
+      await this.page.screenshot({ path: filePath, fullPage: true });
+      console.log(`  📸 Screenshot saved: ${filePath}`);
+      return filePath;
+    } catch (error) {
+      console.warn(`  ⚠️  Failed to capture screenshot: ${error}`);
+      return null;
+    }
+  }
+
+  private async recordSubmission(
+    status: 'success' | 'error' | 'unknown',
+    message: string,
+    screenshotPath: string | null,
+  ): Promise<void> {
+    await logSubmission({
+      timestamp: new Date().toISOString(),
+      company: this.companyFromUrl(this.currentUrl ?? ''),
+      status,
+      message,
+      jobUrl: this.currentUrl ?? '',
+      screenshotPath,
+      durationMs: 0,
+      errorDetails: null,
+    });
   }
 
   protected async enumerateFields(): Promise<Field[]> {
