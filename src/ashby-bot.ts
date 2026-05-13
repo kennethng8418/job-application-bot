@@ -147,10 +147,11 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
     await fillByLabel('Last Name', personalInfo.lastName);
 
     // University
-    if (personalInfo.university) {
-      await fillByLabel('University', personalInfo.university);
-      await fillByLabel('School', personalInfo.university);
-      await fillByLabel('College', personalInfo.university);
+    const school = personalInfo.education?.school;
+    if (school) {
+      await fillByLabel('University', school);
+      await fillByLabel('School', school);
+      await fillByLabel('College', school);
     }
 
     // Years of Experience
@@ -1093,10 +1094,11 @@ export class AshbyJobApplicationBot extends BaseApplicationBot {
 
             // Check if this is a university question
             if (label && /university|college|school.*attend|where.*did.*you.*go|educational.*institution/i.test(label)) {
-              if (this.resumeData.personalInfo.university) {
+              const school = this.resumeData.personalInfo.education?.school;
+              if (school) {
                 console.log(`  🎓 Found university question: "${label.substring(0, 60)}..."`);
-                await input.fill(this.resumeData.personalInfo.university);
-                console.log(`  ✓ Filled university: ${this.resumeData.personalInfo.university}`);
+                await input.fill(school);
+                console.log(`  ✓ Filled university: ${school}`);
                 await this.page.waitForTimeout(300);
                 continue;
               }

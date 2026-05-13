@@ -12,6 +12,13 @@ export interface SubmissionLogEntry {
   errorDetails: string | null;
 }
 
+// Captured ONCE per process — all submissions in a single bot run share this id.
+// Format: YYYY-MM-DDTHH-MM-SS (filesystem-safe — no colons).
+const RUN_ID = new Date()
+  .toISOString()
+  .replace(/[:.]/g, '-')
+  .replace(/-\d{3}Z$/, 'Z'); // strip milliseconds for shorter filenames
+
 function readExistingEntries(logFile: string): SubmissionLogEntry[] {
   if (!fs.existsSync(logFile)) {
     return [];
@@ -31,19 +38,27 @@ function readExistingEntries(logFile: string): SubmissionLogEntry[] {
   }
 }
 
+function writeLog(logFile: string, entry: SubmissionLogEntry): void {
+  const entries = readExistingEntries(logFile);
+  entries.push(entry);
+  fs.writeFileSync(logFile, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
 export async function logSubmission(entry: SubmissionLogEntry): Promise<void> {
   const logDir = path.resolve(process.cwd(), 'logs');
-  const logFile = path.join(logDir, 'submissions.json');
 
   try {
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const entries = readExistingEntries(logFile);
-    entries.push(entry);
-    fs.writeFileSync(logFile, JSON.stringify(entries, null, 2), 'utf-8');
-    console.log(`  📝 Logged submission to ${logFile}`);
+    const rollingFile = path.join(logDir, 'submissions.json');
+    const runFile = path.join(logDir, `run-${RUN_ID}.json`);
+
+    writeLog(rollingFile, entry);
+    writeLog(runFile, entry);
+
+    console.log(`  📝 Logged submission to ${rollingFile} and ${runFile}`);
   } catch (error) {
     console.warn(`  ⚠️  Failed to write submission log: ${error}`);
   }

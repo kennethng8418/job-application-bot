@@ -646,4 +646,4 @@ Edit `src/apply.ts` lines 11-23 to add your job URLs.
 
 **Last Updated**: 2025-05-05
 **Bot Version**: 1.0
-**Author**: Owner (with Claude Code assistance)
+**Author**: Repository Owner (with Claude Code assistance)

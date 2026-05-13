@@ -1,0 +1,260 @@
+import type { ResumeData } from '../../config/resume-data';
+import type { ResolverContext, ResolverResult } from './types';
+import type { AIAnswerGenerator } from '../ai-answer-generator';
+import { PREFERENCES } from '../../config/answer-preferences';
+import { EEO_DEFAULTS } from './eeo-options';
+
+function normalizeTechKey(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeLabel(raw: string): string {
+  return raw
+    .replace(/\s*\*\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const CITY_TO_COUNTRY: Record<string, string> = {
+  'new york': 'United States',
+  'san francisco': 'United States',
+  'los angeles': 'United States',
+  'london': 'United Kingdom',
+  'berlin': 'Germany',
+  'paris': 'France',
+  'tokyo': 'Japan',
+  'toronto': 'Canada',
+};
+
+function inferCountry(location: string): string {
+  const lower = location.toLowerCase();
+  for (const [city, country] of Object.entries(CITY_TO_COUNTRY)) {
+    if (lower.includes(city)) return country;
+  }
+  return 'United States';
+}
+
+export class FieldResolver {
+  constructor(
+    private readonly resumeData: ResumeData,
+    private readonly aiGenerator?: AIAnswerGenerator,
+  ) {}
+
+  resolve(rawLabel: string, ctx: ResolverContext): ResolverResult {
+    const label = normalizeLabel(rawLabel);
+    const staticResult = this.tryStatic(label, ctx);
+    if (staticResult.kind !== 'unresolved') return staticResult;
+    const eeoResult = this.tryEEO(label);
+    if (eeoResult.kind !== 'unresolved') return eeoResult;
+    const patternResult = this.tryPattern(label);
+    if (patternResult.kind !== 'unresolved') return patternResult;
+    return { kind: 'unresolved' };
+  }
+
+  async resolveAsync(
+    rawLabel: string,
+    ctx: ResolverContext,
+    opts: { isTextarea: boolean },
+  ): Promise<ResolverResult> {
+    const syncResult = this.resolve(rawLabel, ctx);
+    if (syncResult.kind !== 'unresolved') return syncResult;
+
+    if (!opts.isTextarea) return { kind: 'unresolved' };
+    if (!this.aiGenerator || !this.aiGenerator.isEnabled()) {
+      return { kind: 'unresolved' };
+    }
+
+    const answer = await this.aiGenerator.generateAnswer(rawLabel);
+    if (!answer) return { kind: 'unresolved' };
+    return { kind: 'value', value: answer };
+  }
+
+  private tryEEO(label: string): ResolverResult {
+    const { personalInfo } = this.resumeData;
+
+    if (label === 'gender') {
+      return { kind: 'value', value: personalInfo.gender ?? EEO_DEFAULTS.gender };
+    }
+    if (/hispanic|latino/.test(label)) {
+      return { kind: 'value', value: personalInfo.hispanicLatino ?? EEO_DEFAULTS.hispanicLatino };
+    }
+    if (/^race|race.*ethnicity|race and ethnicity|i identify my race|race & ethnicity/.test(label)) {
+      return { kind: 'value', value: personalInfo.race ?? EEO_DEFAULTS.race };
+    }
+    if (/veteran/.test(label)) {
+      return { kind: 'value', value: personalInfo.veteranStatus ?? EEO_DEFAULTS.veteranStatus };
+    }
+    if (/disability|i have a disability/.test(label)) {
+      return { kind: 'value', value: personalInfo.disabilityStatus ?? EEO_DEFAULTS.disabilityStatus };
+    }
+    if (/gender identity|lgbtq|sexual orientation|transgender/.test(label)) {
+      return { kind: 'value', value: 'Prefer not to answer' };
+    }
+    return { kind: 'unresolved' };
+  }
+
+  private tryPattern(label: string): ResolverResult {
+    const { personalInfo, preferences } = this.resumeData;
+
+    if (/linkedin/.test(label)) {
+      return personalInfo.linkedin
+        ? { kind: 'value', value: personalInfo.linkedin }
+        : { kind: 'unresolved' };
+    }
+    if (/github/.test(label)) {
+      return personalInfo.github
+        ? { kind: 'value', value: personalInfo.github }
+        : { kind: 'unresolved' };
+    }
+    if (/website|portfolio/.test(label)) {
+      return personalInfo.portfolio
+        ? { kind: 'value', value: personalInfo.portfolio }
+        : { kind: 'unresolved' };
+    }
+    if (/cover letter/.test(label)) {
+      return this.resumeData.coverLetterPath
+        ? { kind: 'value', value: this.resumeData.coverLetterPath }
+        : { kind: 'skip', reason: 'no-cover-letter-configured' };
+    }
+    if (/preferred (first )?name|name.*you go by/.test(label)) {
+      return { kind: 'value', value: personalInfo.firstName };
+    }
+    if (/pronoun/.test(label)) {
+      return { kind: 'unresolved' };
+    }
+    if (/sponsor|visa|immigration support/.test(label)) {
+      return { kind: 'value', value: preferences.requiresVisaSponsorship ? 'Yes' : 'No' };
+    }
+    if (/legally authorized|authorized to work|work authorization|currently eligible to work|eligible to work legally/.test(label)) {
+      return { kind: 'value', value: preferences.legallyAuthorizedToWork ? 'Yes' : 'No' };
+    }
+    // "Are you ... located in <country>?" is a yes/no question — answer based
+    // on whether the applicant's inferred country matches the target country
+    // in the label. Must come BEFORE the generic location-string pattern,
+    // which would otherwise return the city as the answer.
+    const locatedInCountry = label.match(
+      /are you (currently )?(located|based) in (?:the )?(u\.?s\.?a?\.?|united states|united kingdom|u\.?k\.?|canada|germany|france|japan|australia)\b/,
+    );
+    if (locatedInCountry) {
+      const target = locatedInCountry[3].replace(/\./g, '');
+      const COUNTRY_ALIASES: Record<string, string> = {
+        'us': 'United States',
+        'usa': 'United States',
+        'united states': 'United States',
+        'uk': 'United Kingdom',
+        'united kingdom': 'United Kingdom',
+        'canada': 'Canada',
+        'germany': 'Germany',
+        'france': 'France',
+        'japan': 'Japan',
+        'australia': 'Australia',
+      };
+      const canonicalTarget = COUNTRY_ALIASES[target];
+      const applicantCountry = inferCountry(personalInfo.location);
+      return {
+        kind: 'value',
+        value: canonicalTarget === applicantCountry ? 'Yes' : 'No',
+      };
+    }
+    if (/(currently )?located in|current location|where are you (currently )?(located|based)/.test(label)) {
+      return { kind: 'value', value: personalInfo.location };
+    }
+    if (/onsite|in.office|hybrid|relocate|relocation|willing to (work )?(from|in)|open to being onsite/.test(label)) {
+      const ok = preferences.willingToRelocate || preferences.remote !== 'no';
+      return { kind: 'value', value: ok ? 'Yes' : 'No' };
+    }
+    if (/salary|compensation|target.*base|expected.*base|desired.*pay|annual base/.test(label)) {
+      return preferences.desiredSalary
+        ? { kind: 'value', value: preferences.desiredSalary }
+        : { kind: 'unresolved' };
+    }
+    if (/how did you hear|referral source|hear about (this )?(job|role|position|us)/.test(label)) {
+      return { kind: 'value', value: PREFERENCES.defaults.howDidYouHear };
+    }
+    if (/start date|when can you start|available to start/.test(label)) {
+      return preferences.startDate
+        ? { kind: 'value', value: preferences.startDate }
+        : { kind: 'unresolved' };
+    }
+    if (/years.*experience/.test(label)) {
+      const match = label.match(/^years of (.+?) (?:development )?experience$/);
+      if (match && match[1]) {
+        const key = normalizeTechKey(match[1].trim());
+        const byTech = personalInfo.yearsOfExperienceByTech ?? {};
+        for (const [k, v] of Object.entries(byTech)) {
+          if (normalizeTechKey(k) === key) {
+            return { kind: 'value', value: String(v) };
+          }
+        }
+      }
+      return { kind: 'unresolved' };
+    }
+    if (/interviewed.*(in the past|previously|with us)/.test(label)) {
+      return { kind: 'value', value: 'No' };
+    }
+    if (/restrictive covenant|agreement.*former employer|non-compete/.test(label)) {
+      return { kind: 'value', value: 'No' };
+    }
+    if (/privacy policy|terms.*conditions|acknowledge|i consent|by checking this box/.test(label)) {
+      return { kind: 'value', value: 'Yes' };
+    }
+    if (/affirm.*statements.*accurate|certify.*information|all statements and information/.test(label)) {
+      return { kind: 'value', value: 'true' };
+    }
+    if (/itar/.test(label)) {
+      return { kind: 'value', value: 'U.S. Citizen' };
+    }
+    if (/^school$|university|college|institution/.test(label)) {
+      return personalInfo.education?.school
+        ? { kind: 'value', value: personalInfo.education.school }
+        : { kind: 'unresolved' };
+    }
+    if (/^degree$/.test(label)) {
+      return personalInfo.education?.degree
+        ? { kind: 'value', value: personalInfo.education.degree }
+        : { kind: 'value', value: "Bachelor's Degree" };
+    }
+    if (/discipline|major|field of study/.test(label)) {
+      return personalInfo.education?.discipline
+        ? { kind: 'value', value: personalInfo.education.discipline }
+        : { kind: 'value', value: 'Computer Science' };
+    }
+    if (/location \(city\)/.test(label)) {
+      return { kind: 'value', value: personalInfo.location };
+    }
+
+    return { kind: 'unresolved' };
+  }
+
+  private tryStatic(label: string, ctx: ResolverContext): ResolverResult {
+    const { personalInfo, resumePath } = this.resumeData;
+
+    if (label === 'first name') {
+      return { kind: 'value', value: personalInfo.firstName };
+    }
+    if (label === 'last name') {
+      return { kind: 'value', value: personalInfo.lastName };
+    }
+    if (label === 'email') {
+      return { kind: 'value', value: personalInfo.email };
+    }
+    if (label === 'country') {
+      return { kind: 'value', value: inferCountry(personalInfo.location) };
+    }
+    if (label === 'resume/cv' || label === 'resume') {
+      return { kind: 'value', value: resumePath };
+    }
+    if (label === 'phone') {
+      if (ctx.isPhone === 'first') {
+        return { kind: 'skip', reason: 'duplicate-phone-quirk' };
+      }
+      if (ctx.isPhone === 'second' || ctx.isPhone === 'only') {
+        return { kind: 'value', value: personalInfo.phone };
+      }
+      return { kind: 'unresolved' };
+    }
+
+    return { kind: 'unresolved' };
+  }
+}
