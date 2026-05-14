@@ -485,11 +485,12 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       case 'combobox':
         await field.element.click();
         if (this.page) {
-          // Location (City) is a type-ahead combobox — options don't render
-          // until the user types. Type the first two words of the configured
-          // location (e.g. "New York" from "New York City, NY"), wait for a
-          // suggestion, then press Enter to accept the highlighted item.
-          if (/location \(city\)/i.test(field.label)) {
+          // Location (City) and School are type-ahead comboboxes — options
+          // don't render until the user types. Type the first two words of
+          // the configured value (e.g. "New York" from "New York City, NY",
+          // or "Georgia Institute" from "Georgia Institute of Technology"),
+          // wait for a suggestion, then press Enter to accept the top item.
+          if (/^location \(city\)$|^school$/i.test(field.label)) {
             const prefix = value.split(/\s+/).slice(0, 2).join(' ');
             await field.element.fill(prefix);
             await this.page
