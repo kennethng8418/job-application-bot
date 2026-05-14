@@ -177,6 +177,35 @@ export class FieldResolver {
         ? { kind: 'value', value: preferences.startDate }
         : { kind: 'unresolved' };
     }
+    // Threshold-style years-of-experience questions, e.g.
+    //   "Do you have at least 1 year of experience using Python?"  → Yes/No
+    //   "Do you have 3 or more years of React experience?"          → Yes/No
+    // Two regexes cover both tech positions: tech-before-"experience"
+    // and tech-after-"using/in/with". This branch MUST run before the
+    // generic /years.*experience/ branch below, otherwise the latter's
+    // outer test absorbs the label and returns unresolved.
+    {
+      const techBeforeExperience = label.match(
+        /^do you have (?:at least\s+(\d+)|(\d+)\+?\s*(?:or more)?)\s+years?\s+of\s+(.+?)\s+experience\??$/,
+      );
+      const techAfterUsing = label.match(
+        /^do you have (?:at least\s+(\d+)|(\d+)\+?\s*(?:or more)?)\s+years?\s+of\s+experience\s+(?:using|in|with)\s+(.+?)\??$/,
+      );
+      const thresholdMatch = techBeforeExperience ?? techAfterUsing;
+      if (thresholdMatch) {
+        const thresholdStr = thresholdMatch[1] ?? thresholdMatch[2];
+        const techRaw = (thresholdMatch[3] ?? '').trim();
+        const threshold = parseInt(thresholdStr, 10);
+        const normalizedTech = normalizeTechKey(techRaw);
+        const byTech = personalInfo.yearsOfExperienceByTech ?? {};
+        for (const [k, v] of Object.entries(byTech)) {
+          if (normalizeTechKey(k) === normalizedTech) {
+            return { kind: 'value', value: v >= threshold ? 'Yes' : 'No' };
+          }
+        }
+        return { kind: 'unresolved' };
+      }
+    }
     if (/years.*experience/.test(label)) {
       const match = label.match(/^years of (.+?) (?:development )?experience$/);
       if (match && match[1]) {
