@@ -18,7 +18,7 @@ const baseResumeData: ResumeData = {
     veteranStatus: 'I am not a protected veteran',
     hispanicLatino: 'No',
     education: { degree: "Bachelor's Degree", discipline: 'Computer Science' },
-    yearsOfExperienceByTech: { JavaScript: 2, React: 2, 'C#/.NET': 3 },
+    yearsOfExperienceByTech: { JavaScript: 2, React: 2, 'C#/.NET': 3, Python: 2 },
     yearsOfExperience: 2,
   },
   resumePath: './resumes/test.pdf',
@@ -467,4 +467,57 @@ test('AI fallback: not called when earlier resolver returns a value', async () =
   const result = await r.resolveAsync('First Name', { isPhone: false }, { isTextarea: false });
   assert.equal(called, false);
   assert.deepEqual(result, { kind: 'value', value: 'Test' });
+});
+
+test('Pattern: at least 1 year of Python → Yes (has 2 in config)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Do you have at least 1 year of experience using Python?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: at least 5 years of Python → No (has 2 in config)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Do you have at least 5 years of experience using Python?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: 3 or more years of C#/.NET → Yes (has 3 in config)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Do you have 3 or more years of C#/.NET experience?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'Yes' });
+});
+
+test('Pattern: 4 or more years of React → No (has 2 in config)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Do you have 4 or more years of React experience?',
+    { isPhone: false },
+  );
+  assert.deepEqual(result, { kind: 'value', value: 'No' });
+});
+
+test('Pattern: at least 1 year of unknown tech → unresolved (falls to AI)', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve(
+    'Do you have at least 1 year of Docker experience?',
+    { isPhone: false },
+  );
+  assert.equal(result.kind, 'unresolved');
+});
+
+test('Pattern: existing "Years of X experience" still works after threshold added', () => {
+  const r = new FieldResolver(baseResumeData);
+  const result = r.resolve('Years of React Development Experience', {
+    isPhone: false,
+  });
+  assert.deepEqual(result, { kind: 'value', value: '2' });
 });
