@@ -151,6 +151,7 @@ export class GreenhouseJobApplicationBot extends BaseApplicationBot {
       if (field.kind === 'file') continue;
       // Cover letter is handled by uploadResume() (file upload) — never fill via fillField.
       if (/cover letter/i.test(field.label)) continue;
+      if (!field.required) continue;
 
       const isTextarea = field.kind === 'textarea';
       const result = await this.resolver.resolveAsync(
