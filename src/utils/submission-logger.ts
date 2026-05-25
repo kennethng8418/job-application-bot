@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { getCollection } from './mongo-client';
 
 export interface SubmissionLogEntry {
   timestamp: string;
@@ -61,5 +62,15 @@ export async function logSubmission(entry: SubmissionLogEntry): Promise<void> {
     console.log(`  📝 Logged submission to ${rollingFile} and ${runFile}`);
   } catch (error) {
     console.warn(`  ⚠️  Failed to write submission log: ${error}`);
+  }
+
+  const collection = getCollection();
+  if (collection) {
+    try {
+      await collection.insertOne(entry);
+      console.log(`  🗄️  Logged submission to MongoDB`);
+    } catch (error) {
+      console.warn(`  ⚠️  Failed to write submission to MongoDB: ${error}`);
+    }
   }
 }
