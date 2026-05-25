@@ -5,6 +5,7 @@ import { resumeData } from '../config/resume-data';
 import { AshbyJobApplicationBot } from './ashby-bot';
 import { GreenhouseJobApplicationBot } from './greenhouse-bot';
 import { logSubmission } from './utils/submission-logger';
+import { initMongo, closeMongo } from './utils/mongo-client';
 
 function companyFromUrl(url: string): string {
   const embedMatch = url.match(/[?&]for=([^&]+)/);
@@ -26,6 +27,8 @@ function detectPlatform(url: string): Platform {
 
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
+
+  await initMongo();
 
   const jobUrls: string[] = [
     // Add job URLs here (Ashby or Greenhouse). Examples:
@@ -108,6 +111,7 @@ async function main() {
     await new Promise(r => setTimeout(r, 20000));
     if (initializedAshby) await ashbyBot.close();
     if (initializedGreenhouse) await greenhouseBot.close();
+    await closeMongo();
   }
 }
 
