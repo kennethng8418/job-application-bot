@@ -89,3 +89,48 @@ test('does not throw when write fails (read-only logs dir)', withTempCwd(async (
     fs.chmodSync(logDir, 0o755);
   }
 }));
+
+import { __resetMongoForTests } from '../mongo-client';
+import * as mongoClient from '../mongo-client';
+
+test('writes file even when Mongo is uninitialized', withTempCwd(async (tmpDir) => {
+  __resetMongoForTests();
+  await logSubmission(makeEntry({ company: 'NoMongo' }));
+  const contents = JSON.parse(fs.readFileSync(path.join(tmpDir, 'logs', 'submissions.json'), 'utf-8'));
+  assert.strictEqual(contents.length, 1);
+  assert.strictEqual(contents[0].company, 'NoMongo');
+}));
+
+test('still writes file when Mongo insertOne throws', withTempCwd(async (tmpDir) => {
+  __resetMongoForTests();
+  const original = mongoClient.getCollection;
+  (mongoClient as any).getCollection = () => ({
+    insertOne: async () => { throw new Error('simulated mongo failure'); },
+  });
+  try {
+    await logSubmission(makeEntry({ company: 'MongoFailed' }));
+    const contents = JSON.parse(fs.readFileSync(path.join(tmpDir, 'logs', 'submissions.json'), 'utf-8'));
+    assert.strictEqual(contents.length, 1);
+    assert.strictEqual(contents[0].company, 'MongoFailed');
+  } finally {
+    (mongoClient as any).getCollection = original;
+  }
+}));
+
+test('calls insertOne with the submission entry when collection is available', withTempCwd(async () => {
+  __resetMongoForTests();
+  const inserted: any[] = [];
+  const original = mongoClient.getCollection;
+  (mongoClient as any).getCollection = () => ({
+    insertOne: async (doc: any) => { inserted.push(doc); return { insertedId: 'fake-id' }; },
+  });
+  try {
+    const entry = makeEntry({ company: 'Inserted' });
+    await logSubmission(entry);
+    assert.strictEqual(inserted.length, 1);
+    assert.strictEqual(inserted[0].company, 'Inserted');
+    assert.strictEqual(inserted[0].jobUrl, entry.jobUrl);
+  } finally {
+    (mongoClient as any).getCollection = original;
+  }
+}));
